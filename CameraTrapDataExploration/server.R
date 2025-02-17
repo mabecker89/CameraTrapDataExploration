@@ -33,5 +33,26 @@ server <- function(input, output, session) {
     
   })
   
+  output$custom_data_preview <- renderDT({
+    
+    # Ensure a file is uploaded before proceeding
+    req(input$custom_upload)
+    
+    # Check the file extension
+    ext <- tools::file_ext(input$custom_upload$name)
+    if (!ext %in% c("csv", "xlsx")) {
+      stop("Invalid file; please upload a .csv or .xlsx file")
+    }
+    
+    # Read the uploaded file based on the extension
+    if (ext == "csv") {
+      df <- read_csv(input$custom_upload$datapath)
+    } else if (ext == "xlsx") {
+      df <- read_excel(input$custom_upload$datapath)
+    }
+    
+    DT::datatable(df)
+    
+  })
   
 }

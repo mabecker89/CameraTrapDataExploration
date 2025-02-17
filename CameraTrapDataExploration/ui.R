@@ -7,7 +7,7 @@ header <- dashboardHeader(
   titleWidth = 300
 )
 
-sidebar <- sidebar <- dashboardSidebar(
+sidebar <- dashboardSidebar(
   sidebarMenu(
     id = "tabs",
     # Home tab
@@ -66,22 +66,31 @@ ui_custom_values <- fluidRow(
     box(
       
       h2("Upload Camera Trap Data"), width = 12, style = "font-size: 130%",
-        "Here you may add your own camera trap data to explore using this app.",
-        "Please make sure the format is the same as Wildlife Insights output.",
-        "Once the data is uploaded, you can explore the analysis tabs on the left.",
       
-      "Upload your data (Excel format)",
-      p()
+      "Here you may add your own camera trap data to explore using this app.",
+      p(),
+      "Please make sure the format is the same as Wildlife Insights output.",
+      p(),
+      "Once the data is uploaded, you can explore the analysis tabs on the left.",
+      p(),
+      "Please upload your data as either an Excel or csv file.",
+      p(),
       
-    # fileInput("custom_upload", label = NULL, buttonLabel = "Upload Data", width = "50%"),
-    #  )
-    
-    #box(h3("Data Preview"), width = 12,
-    #    tableOutput("custom_data_preview"))
+     fileInput("custom_upload", 
+               label = NULL, 
+               buttonLabel = "Upload Data",
+               placeholder = "No file selected",
+               accept = c("csv", "xlsx"),
+               width = "50%")),
+     
+     box(h3("Data Preview"), 
+         width = 12,
+         DTOutput(outputId = "custom_data_preview"))
     
   )
 )
-)
+
+
 
 # Map ----------------------------------------------------------------------------------------------------------
 

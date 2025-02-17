@@ -8,6 +8,10 @@ library(htmltools)
 library(leaflet)
 library(leaflet.extras)
 library(sf)
+library(waiter)
+library(tools)
+library(readxl)
+library(DT)
 
 # Set max file size to 25 MB
 options(shiny.maxRequestSize = 25 * 1024^2)
