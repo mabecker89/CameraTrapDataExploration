@@ -92,15 +92,68 @@ ui_custom_values <- fluidRow(
 
 
 
-# Map ----------------------------------------------------------------------------------------------------------
+# Map and camera check ----------------------------------------------------------------------------------------------------------
 
 ui_map <- fluidRow(
   
-  column(width = 12,
-         leafletOutput("map", width = "100%", height = map_height)  
-         )
+  # Map of camera locations
+  column(
+      h2("Camera locations"), width = 12, style = "font-size: 130%",
+         
+         "The following map represents the locations of your cameras in your deployment data.",
+         p(),
+         "You can click on the individual icons to see the placenames.",
+         p(),
+         "If a camera is projecting in an incorrect location, you will need to return to your data manager and update it there.",
+         p(),
+         
+         leafletOutput("map", width = "100%", height = map_height),  
+         
   
+  # Camera activity check
+  box(h2("Camera activity"), width = 12, style = "font-size: 130%", 
+      
+      "The following plot represents the periods of time there was a camera deployed at each placename (black lines).",
+      p(),
+      "The black dots represent each time a different deployment period starts and ends.",
+      p(),
+      "The orange blocks represent the period of time between the first and last image for each deployment.",
+      p(),
+      plotlyOutput(outputId = "deployment_dates", height = "auto"))
+  
+  )
+
 )
+
+# Independent data creation ----------------------------------------------------------------------------------------------------------
+
+ui_ind_detect <- fluidRow(
+
+  # Map of camera locations
+  column(
+    h2("Independent data creation"), width = 12, style = "font-size: 130%",
+
+    "This page creates and stores your independent data.",
+    p(),
+    "You first need to specify your inderpendance interval (minimum = 0.01, max = 1000).",
+    p(),
+    "Note: Most camera trappers use 30.",
+    p(),
+    numericInput("ind_thresh", "Minutes:", 10, min = 0.01, max = 1000),
+    "You also need to select the column which specifies your count data",
+    p(),
+    
+    # MAKE THIS A DROP DOWN BASED ON COLUMNS IN IMAGE DATA
+    
+    textInput("count", "group_size"),
+    verbatimTextOutput("value")
+    
+    )
+
+  )
+
+
+
     
 # ----------------------------------------------------------------------------------------------------------
 
@@ -113,7 +166,7 @@ body <- dashboardBody(
     tabItem("upload", ui_custom_values),
     tabItem("map", ui_map),
     tabItem("loc_plot"),
-    tabItem("ind_detect"),
+    tabItem("ind_detect",ui_ind_detect),
     tabItem("temporal"),
     tabItem("capture"),
     tabItem("spatial_capture"),
