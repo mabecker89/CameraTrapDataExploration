@@ -73,16 +73,18 @@ ui_custom_values <- fluidRow(
       p(),
       "Once the data is uploaded, you can explore the analysis tabs on the left.",
       p(),
-      "Please upload your data as either an Excel or csv file.",
+      "You can upload your data either as multiple csv or Excel files, or as a zipped folder.",
       p(),
       
-     fileInput("custom_upload", 
-               label = NULL,
+     fileInput("files", 
+               label = "Upload individual files or a ZIP folder:",
                multiple = TRUE,
                buttonLabel = "Upload Data",
                placeholder = "No file selected",
-               accept = c("csv", "xlsx"),
+               accept = c(".csv", ".xlsx", ".zip"),
                width = "50%"),
+     
+     actionButton("clear_files", "Clear"),
      
      uiOutput("selected_file")
      

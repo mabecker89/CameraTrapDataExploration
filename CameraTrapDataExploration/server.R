@@ -9,21 +9,71 @@ server <- function(input, output, session) {
   # Reactive expression to read in the data files provided by the user
   data_store <- reactiveValues(dfs = list())
   
-  observeEvent(input$custom_upload, {
+  observeEvent(input$files, {
     
-    req(input$custom_upload$datapath)
+    # Ensure files exist
+    req(input$files)
     
-    # Read each file into a list
-    dfs <- lapply(input$custom_upload$datapath, read.csv)
+    # List to store dataframes
+    dfs <- list()
     
-    data_store$dfs <- setNames(dfs, input$custom_upload$name)
+    # Iterate through uploaded files
+    for (i in seq_along(input$files$datapath)) {
+      file_path <- input$files$datapath[i]
+      file_name <- input$files$name[i]
+      
+      if (grepl("\\.csv$", file_name, ignore.case = TRUE)) {
+        
+        # Directly read CSV file
+        dfs[[file_name]] <- read.csv(file_path, stringsAsFactors = FALSE)
+        
+      } else if (grepl("\\.zip$", file_name, ignore.case = TRUE)) {
+        
+        # Unzip to a temporary directory
+        temp_dir <- file.path(tempdir(), paste0("unzipped_", i))
+        dir.create(temp_dir, showWarnings = FALSE)
+        unzip(file_path, exdir = temp_dir)
+        
+        # List extracted files
+        all_extracted <- list.files(temp_dir, full.names = TRUE, recursive = TRUE)
+        
+        # Filter for CSV files
+        csv_files <- list.files(temp_dir, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)
+        
+        if (length(csv_files) == 0) {
+          message("No CSV files found in ZIP.")
+        }
+        
+        # Read all extracted CSVs
+        for (csv in csv_files) {
+          dfs[[basename(csv)]] <- read.csv(csv, stringsAsFactors = FALSE)
+        }
+      }
+    }
+    
+    # Ensure the reactiveValues object updates properly
+    isolate({
+      if (length(dfs) > 0) {
+        data_store$dfs <- dfs
+      } else {
+        data_store$dfs <- list()  # Reset if no valid CSVs found
+      }
+    })
+    
+  })
+  
+  observeEvent(input$clear_files, {
+    
+    data_store$dfs <- list()
+    
+    shinyjs::reset("files")
     
   })
   
   # Dropdown to select a file to preview
   output$selected_file <- renderUI({
     
-    req(data_store$dfs)
+    req(length(data_store$dfs) > 0)  # Ensure data exists
     
     selectInput("choice", "Select a File to Preview",
                 choices = names(data_store$dfs),
@@ -36,7 +86,6 @@ server <- function(input, output, session) {
     
     req(input$choice, data_store$dfs)
     
-    #head(data_list()[[1]])
     DT::datatable(data_store$dfs[[input$choice]])
     
   })
