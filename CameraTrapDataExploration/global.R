@@ -12,6 +12,7 @@ library(waiter)
 library(tools)
 library(readxl)
 library(DT)
+library(plotly)
 
 # Set max file size to 25 MB
 options(shiny.maxRequestSize = 25 * 1024^2)
@@ -24,6 +25,11 @@ images <- read_csv("images.csv")
 projects <- read_csv("projects.csv")
 
 # App parameters
+
+# IMPORTANT FOR WILDLIFE INSIGHTS DATA 
+images <- left_join(images, deployments[,c("deployment_id", "placename")])
+
+# Parameters
 title <- "Camera Trap Data Exploration"
 skin <- "green"
 map_height <- 600
