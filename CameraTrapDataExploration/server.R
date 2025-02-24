@@ -5,28 +5,41 @@ server <- function(input, output, session) {
  
   
   # Upload Data ----------------------------------------------------------------------------------------------------------
-  output$custom_data_preview <- renderDT({
+  
+  # Reactive expression to read in the data files provided by the user
+  data_store <- reactiveValues(dfs = list())
+  
+  observeEvent(input$custom_upload, {
     
-    # Ensure a file is uploaded before proceeding
-    req(input$custom_upload)
+    req(input$custom_upload$datapath)
     
-    # Check the file extension
-    ext <- tools::file_ext(input$custom_upload$name)
-    if (!ext %in% c("csv", "xlsx")) {
-      stop("Invalid file; please upload a .csv or .xlsx file")
-    }
+    # Read each file into a list
+    dfs <- lapply(input$custom_upload$datapath, read.csv)
     
-    # Read the uploaded file based on the extension
-    if (ext == "csv") {
-      df <- read_csv(input$custom_upload$datapath)
-    } else if (ext == "xlsx") {
-      df <- read_excel(input$custom_upload$datapath)
-    }
-    
-    DT::datatable(df)
+    data_store$dfs <- setNames(dfs, input$custom_upload$name)
     
   })
   
+  # Dropdown to select a file to preview
+  output$selected_file <- renderUI({
+    
+    req(data_store$dfs)
+    
+    selectInput("choice", "Select a File to Preview",
+                choices = names(data_store$dfs),
+                selected = names(data_store$dfs)[1])
+  
+    })
+  
+  # Render a preview of the selected file
+  output$custom_data_preview <- renderDT({
+    
+    req(input$choice, data_store$dfs)
+    
+    #head(data_list()[[1]])
+    DT::datatable(data_store$dfs[[input$choice]])
+    
+  })
   
    
   # Map ------------------------------------------------------------------------

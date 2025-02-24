@@ -77,11 +77,16 @@ ui_custom_values <- fluidRow(
       p(),
       
      fileInput("custom_upload", 
-               label = NULL, 
+               label = NULL,
+               multiple = TRUE,
                buttonLabel = "Upload Data",
                placeholder = "No file selected",
                accept = c("csv", "xlsx"),
-               width = "50%")),
+               width = "50%"),
+     
+     uiOutput("selected_file")
+     
+     ),
      
      box(h3("Data Preview"), 
          width = 12,
