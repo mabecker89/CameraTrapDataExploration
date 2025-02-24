@@ -23,7 +23,9 @@ deployments <- read_csv("deployments.csv")
 images <- read_csv("images.csv")
 projects <- read_csv("projects.csv")
 
-# Parameters
+# App parameters
 title <- "Camera Trap Data Exploration"
+skin <- "green"
 map_height <- 600
+
 

@@ -129,7 +129,7 @@ dashboardPage(
   sidebar = sidebar,
   body =   body,
   title = title,
-  skin = "green"
+  skin = skin
 )
 
 
