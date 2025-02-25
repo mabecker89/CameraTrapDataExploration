@@ -15,11 +15,11 @@ sidebar <- dashboardSidebar(
     # Upload camera trap data
     menuItem("Upload", tabName = "upload", icon = icon("table")),
     # Leaflet map of camera locations
-    menuItem("Map", tabName = "map", icon = icon("globe-americas")),
+    menuItem("Data checking", tabName = "map", icon = icon("globe-americas")),
     # Analysis data exploration
     menuItem("Analysis Data Exploration", icon = icon("wpexplorer"),
              menuSubItem("Locations Plot", tabName = "loc_plot"),
-             menuSubItem("Independent Detections Summary", tabName = "ind_detect"),
+             menuSubItem("Generate Independent Detections", tabName = "ind_detect"),
              menuSubItem("Temporal Patterns", tabName = "temporal"),
              menuSubItem("Capture Rates", tabName = "capture"),
              menuSubItem("Spatial Patterns", tabName = "spatial_capture"),
@@ -150,10 +150,12 @@ ui_ind_detect <- fluidRow(
     "You also need to select the column which specifies your count data",
     p(),
     
-    # MAKE THIS A DROP DOWN BASED ON COLUMNS IN IMAGE DATA
+    # Select the "count" column. Only give the user numeric inputs as an option
+    selectInput("ind_count", "Choose a Column:", choices = names(images)[sapply(images, function(col) is.numeric(col) && all(col == floor(col)))]),
     
-    textInput("count", "group_size"),
-    verbatimTextOutput("value")
+    # Make a button to run the independent detections
+    p(),
+    actionButton("ind_run", "Generate independent detections", class = "btn-lg btn-success")
     
     )
 

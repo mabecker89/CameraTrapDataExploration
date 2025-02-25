@@ -206,41 +206,40 @@ server <- function(input, output, session) {
 
 # Independent data creation  ---------------------------------------------------
 
-# I think this needs to be done with reactives ultimately 
-# 
-  # Effort lookup
-  output$effort_lookup <- renderTable({
-      
-      tmp <- deployments[is.na(deployments$end_date)==F,]
-      
-      # Create an empty list to store our days
-      daily_lookup <- list()
-      
-      # Loop through the deployment dataframe and create a row for every day the camera is active
-      for(i in 1:nrow(tmp))
-      {
-        if(ymd(tmp$start_date[i])!=ymd(tmp$end_date[i]))
-        {
-          daily_lookup[[i]] <- data.frame("date"=seq(ymd(tmp$start_date[i]), ymd(tmp$end_date[i]), by="days"), "placename"=tmp$placename[i])
-        }
-      }
-      
-      # Merge the lists into a dataframe
-      row_lookup <- bind_rows(daily_lookup)
-      
-      # Remove duplicates - when start and end days are the same for successive deployments
-      row_lookup <- row_lookup[duplicated(row_lookup)==F,]
-      
-      row_lookup
-      
-    })
-    
-  # Independence selection
-  output$ind_thresh <- renderText({ input$ind_thresh })
-  # Count column
-  output$count_col <- renderText({ input$count_col })
+# WONT WORK UNTIL THE SERVERS ARE SEPARATED  
   
-  
+# # Create the reactive outputs
+#   row_lookup <- reactiveVal(NULL)
+#   independent_data <- reactiveVal(NULL)
+#   
+#   # When you click run on the ui, the following happens
+#   observeEvent(input$ind_run, {
+#     
+#     ###############
+#     # Effort lookup - CHANGE TO UPLOADED DATA
+#         tmp <- deployments[is.na(deployments$end_date)==F,]
+#         daily_lookup <- list()
+#         # Loop through the deployment dataframe and create a effort for every day the camera is active
+#         for(i in 1:nrow(tmp))
+#         {
+#           if(ymd(tmp$start_date[i])!=ymd(tmp$end_date[i]))
+#           {
+#             daily_lookup[[i]] <- data.frame("date"=seq(ymd(tmp$start_date[i]), ymd(tmp$end_date[i]), by="days"), "placename"=tmp$placename[i])
+#           }
+#         }
+#         # Merge the lists into a dataframe
+#         daily_lookup <- bind_rows(daily_lookup)
+#         # Remove duplicates - when start and end days are the same for successive deployments
+#         daily_lookup <- row_lookup[duplicated(daily_lookup)==F,]
+#         # Store as the reactive
+#         row_lookup(daily_lookup)
+#     
+#     # Dummy independent data
+#         ind_dat <- data.frame(ColumnA = toupper(input$ind_thresh), ColumnB = input$ind_count)
+#         independent_data(ind_dat)
+#      
+#   })  
+#   
   
 # THE CLOSING BRACKET    
 }
