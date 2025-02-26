@@ -91,14 +91,15 @@ server <- function(input, output, session) {
   })
   
    
-  # Map ------------------------------------------------------------------------
+  # Reactive Map ------------------------------------------------------------------------
   output$map <- renderLeaflet({
     
+    #req(data_store())
+    deployments<- data_store$dfs[["deployments.csv"]]
     locs <- deployments |>
       select(placename, longitude, latitude) |>
       distinct() |>
-      st_as_sf(coords = c("longitude", "latitude"), crs = 4326) |>
-      filter(!placename == "ALG069")
+      st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
     
     cam <- makeAwesomeIcon(
       icon = "camera",
@@ -125,15 +126,18 @@ server <- function(input, output, session) {
   # Deployment check -----------------------------------------------------------
   
   output$deployment_dates <- renderPlotly({
+    
+    # Call the saved data
+    deployments <- data_store$dfs[["deployments.csv"]]
     # format dates
     # start dates
-    deployments$start_date <- ymd(deployments$start_date)
+    deployments$start_date <- ymd_hms(deployments$start_date)
     # end dates
-    deployments$end_date   <- ymd(deployments$end_date)
+    deployments$end_date   <- ymd_hms(deployments$end_date)
     # durations
     deployments$days <- interval(deployments$start_date, deployments$end_date)/ddays(1)
-    # image timestamps
-    images$timestamp <- ymd_hms(images$timestamp)
+    # # image timestamps
+    # images$timestamp <- ymd_hms(images$timestamp)
     
     # Call the plot
     p <- plot_ly()
@@ -152,30 +156,30 @@ server <- function(input, output, session) {
       for(j in 1:nrow(tmp))
       {
         # Add a box reflecting the first and last image for each deployment
-        tmp_img <- images[images$deployment_id==tmp$deployment_id[j],]
-        # Only run if there are images
-        if(nrow(tmp_img>0))
-          {
-        # Add an orange colour block to show when images were collected
-        p <- add_trace(p, 
-                       #Use the start and end date as x coordinates
-                       x = c(min(tmp_img$timestamp), max(tmp_img$timestamp)), 
-                       #Use the counter for the y coordinates
-                       y = c(i,i), 
-                       # State the type of chart
-                       type="scatter",
-                       # make a line that also has points
-                       mode = "lines", 
-                       # Add the deployment ID as hover text
-                       hovertext=tmp$deployment_id[j], 
-                       color=I("orange"),
-                       # Color it all black
-                       line=list(
-                       width=8,
-                       opacity=0.7),
-                       # Suppress the legend
-                       showlegend = FALSE)
-            }
+        # tmp_img <- images[images$deployment_id==tmp$deployment_id[j],]
+        # # Only run if there are images
+        # if(nrow(tmp_img>0))
+        #   {
+        # # Add an orange colour block to show when images were collected
+        # p <- add_trace(p,
+        #                #Use the start and end date as x coordinates
+        #                x = c(min(tmp_img$timestamp), max(tmp_img$timestamp)),
+        #                #Use the counter for the y coordinates
+        #                y = c(i,i),
+        #                # State the type of chart
+        #                type="scatter",
+        #                # make a line that also has points
+        #                mode = "lines",
+        #                # Add the deployment ID as hover text
+        #                hovertext=tmp$deployment_id[j],
+        #                color=I("orange"),
+        #                # Color it all black
+        #                line=list(
+        #                width=8,
+        #                opacity=0.7),
+        #                # Suppress the legend
+        #                showlegend = FALSE)
+        #     }
         # Add a black line to 'p' denotting the start and end periods of each deployment
         p <- add_trace(p, 
                        #Use the start and end date as x coordinates
@@ -208,38 +212,38 @@ server <- function(input, output, session) {
 
 # WONT WORK UNTIL THE SERVERS ARE SEPARATED  
   
-# # Create the reactive outputs
-#   row_lookup <- reactiveVal(NULL)
-#   independent_data <- reactiveVal(NULL)
-#   
-#   # When you click run on the ui, the following happens
-#   observeEvent(input$ind_run, {
-#     
-#     ###############
-#     # Effort lookup - CHANGE TO UPLOADED DATA
-#         tmp <- deployments[is.na(deployments$end_date)==F,]
-#         daily_lookup <- list()
-#         # Loop through the deployment dataframe and create a effort for every day the camera is active
-#         for(i in 1:nrow(tmp))
-#         {
-#           if(ymd(tmp$start_date[i])!=ymd(tmp$end_date[i]))
-#           {
-#             daily_lookup[[i]] <- data.frame("date"=seq(ymd(tmp$start_date[i]), ymd(tmp$end_date[i]), by="days"), "placename"=tmp$placename[i])
-#           }
-#         }
-#         # Merge the lists into a dataframe
-#         daily_lookup <- bind_rows(daily_lookup)
-#         # Remove duplicates - when start and end days are the same for successive deployments
-#         daily_lookup <- row_lookup[duplicated(daily_lookup)==F,]
-#         # Store as the reactive
-#         row_lookup(daily_lookup)
-#     
-#     # Dummy independent data
-#         ind_dat <- data.frame(ColumnA = toupper(input$ind_thresh), ColumnB = input$ind_count)
-#         independent_data(ind_dat)
-#      
-#   })  
-#   
+# Create the reactive outputs
+  row_lookup <- reactiveVal(NULL)
+  independent_data <- reactiveVal(NULL)
+
+  # When you click run on the ui, the following happens
+  observeEvent(input$ind_run, {
+    output$test <- renderTable(data_store$dfs[["deployments.csv"]])
+    # ###############
+    # # Effort lookup - CHANGE TO UPLOADED DATA
+    #     tmp <- deployments[is.na(deployments$end_date)==F,]
+    #     daily_lookup <- list()
+    #     # Loop through the deployment dataframe and create a effort for every day the camera is active
+    #     for(i in 1:nrow(tmp))
+    #     {
+    #       if(ymd(tmp$start_date[i])!=ymd(tmp$end_date[i]))
+    #       {
+    #         daily_lookup[[i]] <- data.frame("date"=seq(ymd(tmp$start_date[i]), ymd(tmp$end_date[i]), by="days"), "placename"=tmp$placename[i])
+    #       }
+    #     }
+    #     # Merge the lists into a dataframe
+    #     daily_lookup <- bind_rows(daily_lookup)
+    #     # Remove duplicates - when start and end days are the same for successive deployments
+    #     daily_lookup <- row_lookup[duplicated(daily_lookup)==F,]
+    #     # Store as the reactive
+    #     row_lookup(daily_lookup)
+    # 
+    # # Dummy independent data
+    #     ind_dat <- data.frame(ColumnA = toupper(input$ind_thresh), ColumnB = input$ind_count)
+    #     independent_data(ind_dat)
+
+  })
+
   
 # THE CLOSING BRACKET    
 }

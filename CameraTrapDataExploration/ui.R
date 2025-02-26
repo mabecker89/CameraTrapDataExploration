@@ -155,7 +155,9 @@ ui_ind_detect <- fluidRow(
     
     # Make a button to run the independent detections
     p(),
-    actionButton("ind_run", "Generate independent detections", class = "btn-lg btn-success")
+    actionButton("ind_run", "Generate independent detections", class = "btn-lg btn-success"),
+    p(),
+    tableOutput(outputId = "test")
     
     )
 
