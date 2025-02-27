@@ -13,6 +13,7 @@ library(tools)
 library(readxl)
 library(DT)
 library(plotly)
+library(stringr)
 
 # Set max file size to 25 MB
 options(shiny.maxRequestSize = 25 * 1024^2)
