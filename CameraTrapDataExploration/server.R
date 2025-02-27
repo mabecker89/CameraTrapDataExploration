@@ -109,7 +109,8 @@ server <- function(input, output, session) {
     
     req(input$choice, data_store$dfs)
     
-    DT::datatable(data_store$dfs[[input$choice]])
+    DT::datatable(data_store$dfs[[input$choice]],
+                  options = list(scrollX = TRUE))
     
   })
   
@@ -232,9 +233,7 @@ server <- function(input, output, session) {
 
 
 
-# Independent data creation  ---------------------------------------------------
-
-
+  # Independent data creation  ---------------------------------------------------
 
   # When you click run on the ui, the following happens
   observeEvent(input$ind_run, {
@@ -250,7 +249,9 @@ server <- function(input, output, session) {
     images <- data_store$dfs[["images.csv"]]
     
     ###############
+    
     # Effort lookup
+    
         tmp <- deployments[is.na(deployments$end_date)==F,]
         daily_lookup <- list()
         # Loop through the deployment dataframe and create a effort for every day the camera is active
@@ -270,18 +271,19 @@ server <- function(input, output, session) {
         row_lookup(daily_lookup)
 
     ##############
+        
     # Get the data in order
         
         independent  <- input$ind_thresh
         images$animal_count <- images[,input$ind_count] 
        
-        
         img_tmp <- images %>%
           arrange(deployment_id) %>%        # Order by deployment_id
           group_by(deployment_id, sp) %>%   # Group species together
           mutate(duration = int_length(timestamp %--% lag(timestamp))) # Calculate the gap between successive detections
     
     ###################
+    
     # Assign event ID's    
         
         # Give a random value to all cells
@@ -318,7 +320,9 @@ server <- function(input, output, session) {
         img_tmp$duration <- NULL
         
       #####################
+      
       # Add additional data
+        
         # find out the last and the first of the time in the group
         top <- img_tmp %>% group_by(event_id) %>% top_n(1,timestamp) %>% dplyr::select(event_id, timestamp)
         bot <- img_tmp %>% group_by(event_id) %>% top_n(-1,timestamp) %>% dplyr::select(event_id, timestamp)
@@ -329,32 +333,33 @@ server <- function(input, output, session) {
         
         # calculate the duration and add the other elements
         diff <-  top %>% left_join(bot, by="event_id") %>%
-          mutate(event_duration=abs(int_length(timestamp %--% timestamp_end))) %>%
-          left_join(event_grp, by="event_id")%>%
-          left_join(img_num, by="event_id")
+          mutate(event_duration = abs(int_length(timestamp %--% timestamp_end))) %>%
+          left_join(event_grp, by = "event_id")%>%
+          left_join(img_num, by = "event_id")
         
         # Remove columns you don't need
-        diff$timestamp   <-NULL
-        diff$timestamp_end <-NULL
+        diff$timestamp <- NULL
+        diff$timestamp_end <- NULL
         # remove duplicates
         diff <- diff[duplicated(diff)==F,]
         # Merge the img_tmp with the event data
         img_tmp <-  img_tmp %>%
-          left_join(diff,by="event_id")
+          left_join(diff, by = "event_id")
         
-        ######################
-        # Create independent data
+      ######################
         
-        # Remove duplicates and remove dections occuring outside of known activity periods
+      # Create independent data
+        
+          # Remove duplicates and remove dections occuring outside of known activity periods
           ind_dat <- img_tmp[duplicated(img_tmp$event_id)==F,]
         
           # Make a  unique code for ever day and deployment where cameras were functioning
           tmp <- paste(daily_lookup$date, daily_lookup$placename)
         
-          #Subset ind_dat to data that matches the unique codes
+          # Subset ind_dat to data that matches the unique codes
           ind_dat <- ind_dat[paste(substr(ind_dat$timestamp,1,10), ind_dat$placename) %in% tmp, ]
           
-          # make the species column a ‘factor’ - this makes all the data frame building operations much simpler
+          # Make the species column a ‘factor’ - this makes all the data frame building operations much simpler
           ind_dat$sp <- as.factor(ind_dat$sp)
         
         #######################
