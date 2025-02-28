@@ -8,6 +8,7 @@ server <- function(input, output, session) {
   
   # Reactive expression to read in the data files provided by the user
   data_store <- reactiveValues(dfs = list())
+  analysis_data_store <- reactiveValues(results = list())
   
   observeEvent(input$files, {
     
@@ -153,16 +154,7 @@ server <- function(input, output, session) {
     # Call the saved data
     deployments <- data_store$dfs[["deployments.csv"]]
     images <- data_store$dfs[["images.csv"]]
-    # format dates
-    # start dates
-    # deployments$start_date <- ymd_hms(deployments$start_date)
-    # end dates
-    # deployments$end_date   <- ymd_hms(deployments$end_date)
-    # durations
-    #deployments$days <- interval(deployments$start_date, deployments$end_date)/ddays(1)
-    # image timestamps
-    #images$timestamp <- ymd_hms(images$timestamp)
-    
+  
     # Call the plot
     p <- plot_ly()
     
@@ -230,7 +222,11 @@ server <- function(input, output, session) {
       tickmode = "array"))
   })
 
-
+  #update the count  dropdown dynamically based on available numeric inputs
+  observe({
+    updateSelectInput(session, "ind_count", choices = names(data_store$dfs[["images.csv"]])[sapply(data_store$dfs[["images.csv"]], function(col) is.numeric(col) && all(col == floor(col)))])
+  })
+  
 
   # Independent data creation  ---------------------------------------------------
 
@@ -251,26 +247,109 @@ server <- function(input, output, session) {
                                  images = data_store$dfs[["images.csv"]],
                                  threshold = input$ind_thresh,
                                  count_column = input$ind_count)
-    
+   
+
     # Hide spinner when processing is done
     w$hide()
     
-    # Render a preview of the selected dataframe
     
-    output$test <- renderDT({
+    # Dropdown to select a file to preview
+    output$selected_analysis_file <- renderUI({
       
-      req(length(data_store$dfs) > 0)
+      req(length(results) > 0)  # Ensure data exists
       
-      DT::datatable(results[["independent_total_observations"]],
-                    options = list(scrollX = TRUE))
+      selectInput("analysis_choice", "Select a File to Preview",
+                  choices = names(results),
+                  selected = names(results)[1])
       
     })
+    
+    # Render a preview of the selected file
+    output$custom_analysis_data_preview <- renderDT({
+      
+      req(input$analysis_choice, results)
+      
+      DT::datatable(results[[input$analysis_choice]],
+                    options = list(scrollX = TRUE))
+    
 
   })
   
+    # detection summaries -----------------------------------------------------------    
+    
+    output$capture_summary <- renderPlotly({
+      
+      # Call the saved data
+      deployments <- data_store$dfs[["deployments.csv"]]
+      images <- data_store$dfs[["images.csv"]]
+      
+    long_obs <- results[["independent_total_observations"]] %>% 
+      pivot_longer(cols=results[["species_list"]]$sp,  # The columns we want to create into rows - species
+                   names_to="sp",       # What we what the number column to be called
+                   values_to = "count") # Takes the values in the species columns and calls them `count`
+    
+    
+    # We can them summaries those using dplyr
+    tmp <- long_obs %>%                   # Take the long observation data frame `long_obs` 
+      group_by(sp) %>%            # Group by species
+      summarise(count=sum(count)) # Sum all the independent observations
+    
+    # Add it to the sp_summary dataframe
+    sp_summary <- left_join(results[["species_list"]], tmp)
+    
+    # Calculate raw occupancy
+    # We use the mutate function to mutate the column
+    total_binary <-   results[["independent_total_observations"]] %>%    # The total obs dataframe              
+      mutate(across(results[["species_list"]]$sp, ~+as.logical(.x)))  # across all of the species columns, make it binary
+    
+    # Flip the dataframe to longer - as before
+    long_bin <- total_binary %>% 
+      pivot_longer(cols=results[["species_list"]]$sp, names_to="sp", values_to = "count") # Takes the species names columns, and makes them unique rows with "sp" as the key 
+    
+    # We can now sum the presence/absences and divide by the number of survey locations
+    tmp <- long_bin %>% 
+      group_by(sp) %>% 
+      summarise(occupancy=sum(count)/nrow(results[["camera_locations"]])) # divided the sum by the number of sites
+    
+    # add the results to the sp_summary
+    sp_summary <- left_join(sp_summary, tmp)
+    
+    # Order the summaries to something sensible
+    sp_summary <- sp_summary[order(sp_summary$count),]
+    
+    yform <- list(categoryorder = "array",
+                  categoryarray = sp_summary$sp)
+    
+    xform <- list(title="Captures")
+    
+    # Capture rate
+    fig1 <- plot_ly(x = sp_summary$count, y = sp_summary$sp, type = 'bar', orientation = 'h') %>% 
+      layout(yaxis = yform, xaxis=xform)
+    
+    yform <- list(categoryorder = "array",
+                  categoryarray = sp_summary$sp,
+                  showticklabels=F)
+    xform <- list(title="Occupancy")
+    
+    
+    # Occupancy
+    fig2 <- plot_ly(x = sp_summary$occupancy, y = sp_summary$sp, type = 'bar', orientation = 'h') %>% 
+      layout(yaxis = yform, xaxis=xform)
+    
+    subplot(nrows=1,fig1, fig2, titleX = T)
+    
+    })  
+    
+ 
+ 
+})
+  
+  
+  
+  
+  
+    
 
-
+  
 }
-
-
 

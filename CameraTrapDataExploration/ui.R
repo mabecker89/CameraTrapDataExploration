@@ -14,14 +14,15 @@ sidebar <- dashboardSidebar(
     menuItem("Home", tabName = "home", icon = icon("home")),
     # Upload camera trap data
     menuItem("Upload", tabName = "upload", icon = icon("table")),
-    # Leaflet map of camera locations
+    # Initial data check
     menuItem("Data checking", tabName = "map", icon = icon("globe-americas")),
+    # Analysis data creation
+    menuItem("Independent Detections", tabName = "ind_detect"),
     # Analysis data exploration
     menuItem("Analysis Data Exploration", icon = icon("wpexplorer"),
-             menuSubItem("Locations Plot", tabName = "loc_plot"),
-             menuSubItem("Generate Independent Detections", tabName = "ind_detect"),
+             menuSubItem("Capture summaries", tabName = "capture"),
              menuSubItem("Temporal Patterns", tabName = "temporal"),
-             menuSubItem("Capture Rates", tabName = "capture"),
+             menuSubItem("Capture Rates", tabName = "rates"),
              menuSubItem("Spatial Patterns", tabName = "spatial_capture"),
              menuSubItem("Species Co-Occurrences", tabName = "co_occurrences"),
              menuSubItem("Covariate Plots", tabName = "covariate")),
@@ -147,23 +148,39 @@ ui_ind_detect <- fluidRow(
     "Note: Most camera trappers use 30.",
     p(),
     numericInput("ind_thresh", "Minutes:", 10, min = 0.01, max = 1000),
-    "You also need to select the column which specifies your count data",
+    "You also need to select the column which specifies your count data (note - only numerical columns are available for selection)",
     p(),
     
     # Select the "count" column. Only give the user numeric inputs as an option
-    selectInput("ind_count", "Choose a Column:", choices = names(images)[sapply(images, function(col) is.numeric(col) && all(col == floor(col)))]),
+    selectInput("ind_count", "Choose a Column:", choices = NULL),
     
     # Make a button to run the independent detections
     p(),
     actionButton("ind_run", "Generate independent detections", class = "btn-lg btn-success"),
     p(),
-    DTOutput(outputId = "test")
+    uiOutput("selected_analysis_file"),
+    
+    box(h3("Analysis Data Preview"), 
+        width = 12,
+        DTOutput(outputId = "custom_analysis_data_preview"))
     
     )
 
-  )
+)
 
+# Capture summaries ----------------------------------------------------------------------------------------------------------
 
+ui_capture <- fluidRow(
+  
+  # Detection summaries
+  column(
+    h2("Detection summaries"), width = 12, style = "font-size: 130%",
+    
+    "This page creates summaries of your independent detections.",
+    p(),
+    plotlyOutput(outputId = "capture_summary", height = "auto"))
+ 
+)
 
     
 # ----------------------------------------------------------------------------------------------------------
@@ -177,10 +194,9 @@ body <- dashboardBody(
     tabItem("home"),
     tabItem("upload", ui_custom_values),
     tabItem("map", ui_map),
-    tabItem("loc_plot"),
     tabItem("ind_detect",ui_ind_detect),
+    tabItem("capture", ui_capture),
     tabItem("temporal"),
-    tabItem("capture"),
     tabItem("spatial_capture"),
     tabItem("co_occurrences"),
     tabItem("covariate"),
