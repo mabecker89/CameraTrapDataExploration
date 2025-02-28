@@ -170,6 +170,7 @@ ui_ind_detect <- fluidRow(
 
 body <- dashboardBody(
   autoWaiter(),
+  use_waiter(),
   shinyFeedback::useShinyFeedback(),
   shinyjs::useShinyjs(),
   tabItems(

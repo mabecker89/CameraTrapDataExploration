@@ -14,9 +14,13 @@ library(readxl)
 library(DT)
 library(plotly)
 library(stringr)
+library(rlang)
 
 # Set max file size to 25 MB
 options(shiny.maxRequestSize = 25 * 1024^2)
+
+# Source functions
+source("src.R")
 
 # Load example data
 cameras <- read_csv("cameras.csv")
