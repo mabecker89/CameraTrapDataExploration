@@ -219,7 +219,8 @@ server <- function(input, output, session) {
     p <- p %>%   layout(yaxis = list(
       ticktext = as.list(levels(deployments$placename)), 
       tickvals = as.list(1:length(levels(deployments$placename))),
-      tickmode = "array"))
+      tickmode = "array"),
+      height=length(levels(deployments$placename))*20)
   })
 
   #update the count  dropdown dynamically based on available numeric inputs
@@ -274,8 +275,9 @@ server <- function(input, output, session) {
     
 
   })
-  
-    # detection summaries -----------------------------------------------------------    
+
+######################      
+# detection summaries -----------------------------------------------------------    
     
     output$capture_summary <- renderPlotly({
       
@@ -323,8 +325,8 @@ server <- function(input, output, session) {
     xform <- list(title="Captures")
     
     # Capture rate
-    fig1 <- plot_ly(x = sp_summary$count, y = sp_summary$sp, type = 'bar', orientation = 'h') %>% 
-      layout(yaxis = yform, xaxis=xform)
+    fig1 <- plot_ly(x = sp_summary$count, y = sp_summary$sp, type = 'bar', orientation = 'h', name="count") %>% 
+      layout(yaxis = yform, xaxis=xform, height=nrow(sp_summary)*20) # Try to control the height
     
     yform <- list(categoryorder = "array",
                   categoryarray = sp_summary$sp,
@@ -333,7 +335,7 @@ server <- function(input, output, session) {
     
     
     # Occupancy
-    fig2 <- plot_ly(x = sp_summary$occupancy, y = sp_summary$sp, type = 'bar', orientation = 'h') %>% 
+    fig2 <- plot_ly(x = sp_summary$occupancy, y = sp_summary$sp, type = 'bar', orientation = 'h', name="occupancy") %>% 
       layout(yaxis = yform, xaxis=xform)
     
     subplot(nrows=1,fig1, fig2, titleX = T)
@@ -341,7 +343,96 @@ server <- function(input, output, session) {
     })  
     
  
+#############################
+# Temporal patterns -----------------------------------------------------------    
+
+    
+    # Look for the selected option
+    observe({
+      species_dynamic <- results[["species_list"]]$sp
+      updateSelectInput(session, "selected_species", choices = species_dynamic, selected = species_dynamic[1])
+    })
+    
  
+  # # Static Plot 1: Number of Active Cameras Over Time
+  output$camera_effort_plot <- renderPlotly({
+
+    # Pull in the right data
+    mon_obs <- results[["independent_monthly_observations"]]
+    sp_summary <- results[["species_list"]]
+    
+    mon_summary <- mon_obs %>%        # Use the monthly observations dataframe
+      group_by(date) %>%              # Group by the date
+      summarise(locs_active=n(),      # Count the number of active cameras
+                cam_days=sum(days))   # And sum the active days
+
+    mon_summary <- mon_obs %>% 
+      group_by(date) %>%  
+      summarise(across(sp_summary$sp, sum, na.rm=TRUE)) %>% # summarise across all of 
+      # the species columns 
+      left_join(x=mon_summary) 
+    
+     # Update date format
+      mon_summary$date <- ym(mon_summary$date)
+      
+    p1  <- plot_ly(mon_summary, x = ~date, y = ~locs_active, type = "scatter", mode = "lines",
+                   line = list(color = "blue"), name = "Active Cameras") %>%
+      layout(title = "Active Cameras Over Time",
+             xaxis = list(title = "Date"),
+             yaxis = list(title = "Active Cameras", rangemode = "tozero"))  # Ensure y-axis starts at 0
+    
+    
+    mon_summary$all.sp <- rowSums(mon_summary[, sp_summary$sp])
+    mon_summary$all.cr <- mon_summary$all.sp/(mon_summary$cam_days/100)
+
+    p2 <- plot_ly(mon_summary, x = ~date, y = ~all.cr, type = "scatter", mode = "lines",
+                  line = list(color = "darkred"), name = "Capture Rate per 100 days") %>%
+      layout(title = "Overall Capture Rates (All Species)",
+             xaxis = list(title = "Date"),
+             yaxis = list(title = "Capture Rate per 100 days", rangemode = "tozero"))  # Ensure y-axis starts at 0
+    
+    # Combine plots vertically using subplot()
+    subplot(p1, p2, nrows = 2, shareX = TRUE, titleY = TRUE) %>% layout(height = 700)
+    
+    })
+
+    # # Interactive Plot: Capture Rates for Selected Species
+    # output$species_trends_plot <- renderPlot({
+    #   
+    #   req(input$selected_species)  # Ensure a species is selected
+    #   
+    #   filtered_data <- mon_summary %>%
+    #     filter(species == input$selected_species)
+    #   
+    #   ggplot(filtered_data, aes(x = date, y = captures)) +
+    #     geom_line(color = "green", size = 1) +
+    #     labs(title = paste("Capture Rates of", input$selected_species),
+    #          x = "Date", y = "Captures") +
+    #     theme_minimal()
+    # })
+
+    
+###########    
+
+
+      # If you need code to check an object      
+      # 
+      # output$test_table <- renderDT({
+      #   mon_obs <- results[["independent_monthly_observations"]]
+      #   
+      #   
+      #   mon_summary <- mon_obs %>%        # Use the monthly observations dataframe
+      #     group_by(date) %>%              # Group by the date
+      #     summarise(locs_active=n(),      # Count the number of active cameras
+      #               cam_days=sum(days))   # And sum the active days 
+      #   
+      #   
+      #   datatable(mon_summary, options = list(pageLength = 5, autoWidth = TRUE))
+      # })
+      
+      
+      
+       
 })
   
   

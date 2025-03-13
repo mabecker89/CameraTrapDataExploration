@@ -182,6 +182,34 @@ ui_capture <- fluidRow(
  
 )
 
+# Temporal patterns ----------------------------------------------------------------------------------------------------------
+
+
+ui_temporal <- fluidRow(
+  
+  column(12, titlePanel("Temporal trends")),  # Full-width title
+
+  fluidRow(  # First row for static plots
+     column(12, plotlyOutput("camera_effort_plot", height="700px"))  
+  )
+  # ),
+  # 
+  # hr(),  # Horizontal line separator
+  # 
+  # fluidRow(  # Second row for species selection and dynamic plot
+  #   column(4,
+  #          selectInput("selected_species", "Select Species:", 
+  #                      choices = NULL)
+  #   ),
+  #   column(8, plotOutput("species_trends_plot"))  # Interactive Plot
+  # )
+)
+
+
+
+
+# DTOutput("test_table")  
+
     
 # ----------------------------------------------------------------------------------------------------------
 
@@ -196,7 +224,7 @@ body <- dashboardBody(
     tabItem("map", ui_map),
     tabItem("ind_detect",ui_ind_detect),
     tabItem("capture", ui_capture),
-    tabItem("temporal"),
+    tabItem("temporal", ui_temporal),
     tabItem("spatial_capture"),
     tabItem("co_occurrences"),
     tabItem("covariate"),
