@@ -22,10 +22,9 @@ sidebar <- dashboardSidebar(
     menuItem("Analysis Data Exploration", icon = icon("wpexplorer"),
              menuSubItem("Capture summaries", tabName = "capture"),
              menuSubItem("Temporal Patterns", tabName = "temporal"),
-             menuSubItem("Capture Rates", tabName = "rates"),
-             menuSubItem("Spatial Patterns", tabName = "spatial_capture"),
-             menuSubItem("Species Co-Occurrences", tabName = "co_occurrences"),
-             menuSubItem("Covariate Plots", tabName = "covariate")),
+             menuSubItem("Spatial Patterns", tabName = "spatial_capture")
+    #         menuSubItem("Covariate Plots", tabName = "covariate")
+             ),
     menuItem("Glossary", tabName = "glossary", icon = icon("table")),
     menuItem("Report", tabName = "report", icon = icon("book"))
   )
@@ -191,18 +190,47 @@ ui_temporal <- fluidRow(
 
   fluidRow(  # First row for static plots
      column(12, plotlyOutput("camera_effort_plot", height="700px"))  
+
+  ),
+
+  hr(),  # Horizontal line separator
+
+  fluidRow(  # Second row for species selection and dynamic plot
+    column(4,
+           selectInput("selected_species", "Select Species:",
+                       choices = NULL)
+    ),
+    column(8, plotOutput("species_trends_plot"))  # Interactive Plot
+  )  
+)
+
+
+
+# Spatial maps of captures  ----------------------------------------------------------------------------------------------------------
+
+
+ui_spatial_caps <- fluidRow(
+  
+  column(12,  titlePanel("Species Capture Rate Map")),
+  
+  fluidRow(
+      column(12, 
+             selectInput("selected_species_map", "Select Species:",
+                  choices = NULL))
+      ),
+    
+  fluidRow(
+      column(12,leafletOutput("capture_map"))
+      ),
+  hr(),
+  fluidRow(
+      column(12,  titlePanel("Spatial co-occurences"))
+      ),
+  p(),
+  fluidRow(
+    column(12, 
+           plotOutput("corrplot"))
   )
-  # ),
-  # 
-  # hr(),  # Horizontal line separator
-  # 
-  # fluidRow(  # Second row for species selection and dynamic plot
-  #   column(4,
-  #          selectInput("selected_species", "Select Species:", 
-  #                      choices = NULL)
-  #   ),
-  #   column(8, plotOutput("species_trends_plot"))  # Interactive Plot
-  # )
 )
 
 
@@ -225,9 +253,7 @@ body <- dashboardBody(
     tabItem("ind_detect",ui_ind_detect),
     tabItem("capture", ui_capture),
     tabItem("temporal", ui_temporal),
-    tabItem("spatial_capture"),
-    tabItem("co_occurrences"),
-    tabItem("covariate"),
+    tabItem("spatial_capture", ui_spatial_caps),
     tabItem("glossary"),
     tabItem("report")
   )

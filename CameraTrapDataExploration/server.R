@@ -349,7 +349,7 @@ server <- function(input, output, session) {
     
     # Look for the selected option
     observe({
-      species_dynamic <- results[["species_list"]]$sp
+      species_dynamic <- results[["species_list"]]$sp[order(results[["species_list"]]$sp)]
       updateSelectInput(session, "selected_species", choices = species_dynamic, selected = species_dynamic[1])
     })
     
@@ -396,22 +396,113 @@ server <- function(input, output, session) {
     
     })
 
-    # # Interactive Plot: Capture Rates for Selected Species
-    # output$species_trends_plot <- renderPlot({
-    #   
-    #   req(input$selected_species)  # Ensure a species is selected
-    #   
-    #   filtered_data <- mon_summary %>%
-    #     filter(species == input$selected_species)
-    #   
-    #   ggplot(filtered_data, aes(x = date, y = captures)) +
-    #     geom_line(color = "green", size = 1) +
-    #     labs(title = paste("Capture Rates of", input$selected_species),
-    #          x = "Date", y = "Captures") +
-    #     theme_minimal()
-    # })
+    # Interactive Plot: Capture Rates for Selected Species
+    output$species_trends_plot <- renderPlot({
+
+      req(input$selected_species)  # Ensure a species is selected
+      
+      # Pull in the right data
+      mon_obs <- results[["independent_monthly_observations"]]
+      sp_summary <- results[["species_list"]]
+      
+      mon_summary <- mon_obs %>%        # Use the monthly observations dataframe
+        group_by(date) %>%              # Group by the date
+        summarise(locs_active=n(),      # Count the number of active cameras
+                  cam_days=sum(days))   # And sum the active days
+      
+      mon_summary <- mon_obs %>% 
+        group_by(date) %>%  
+        summarise(across(sp_summary$sp, sum, na.rm=TRUE)) %>% # summarise across all of 
+        # the species columns 
+        left_join(x=mon_summary) 
+      
+      # Update date format
+      mon_summary$date <- ym(mon_summary$date)
+      
+      # Wide to long
+      long_df <- mon_summary %>%
+        pivot_longer(
+          cols = sp_summary$sp,  # All species coilumns will be gathered
+          names_to = "sp",  # New column for species names
+          values_to = "Count"  # New column for counts
+        )
+      
+      
+      
+      filtered_data <- long_df %>%
+        filter(sp == input$selected_species)
+
+      ggplot(filtered_data, aes(x = date, y = Count)) +
+        geom_line(color = "darkgreen", size = 1) +
+        labs(title = paste("Capture Rates of", input$selected_species),
+             x = "Date", y = "Captures") +
+        ylim(0, NA) + 
+        theme_minimal()
+    })
+
 
     
+#################
+# Spatial patterns 
+    
+    # Look for the selected option
+    observe({
+      species_dynamic <- results[["species_list"]]$sp[order(results[["species_list"]]$sp)]
+      updateSelectInput(session, "selected_species_map", choices = species_dynamic, selected = species_dynamic[1])
+    })
+    
+    
+    output$capture_map <- renderLeaflet({
+      
+      req(input$selected_species_map) 
+      
+      wide_obs <- results[["independent_total_observations"]] 
+      locs<- results[["camera_locations"]]
+      
+      total_obs <- left_join(wide_obs, locs)
+      
+      focal_cr <- total_obs %>% mutate(CaptureRate = total_obs[[input$selected_species_map]] / (days / 100))
+      
+      leaflet() %>%
+        addProviderTiles(providers$Esri.WorldTopoMap) %>%
+        addCircleMarkers(
+          data = focal_cr,
+          lng = ~longitude,
+          lat = ~latitude,
+          radius = ~(CaptureRate / max(CaptureRate, na.rm = TRUE) * 10) + 1,
+          stroke = FALSE,
+          fillOpacity = 0.6,
+          popup = ~paste(placename, "- Capture Rate:", round(CaptureRate, 2))
+        )
+    })
+    
+
+#################
+# Spatial co-ocurance 
+    
+    
+    
+    output$corrplot <- renderPlot({
+      
+      total_obs <- results[["independent_total_observations"]] 
+      tmp <- total_obs[,!(colnames(total_obs)%in% c("placename", "days"))]
+      M <- cor(tmp[, colSums(tmp)>5])
+      
+      
+      focal_cr <- total_obs %>% mutate(CaptureRate = total_obs[[input$selected_species_map]] / (days / 100))
+      
+      corrplot(M, method="color", 
+               type="upper", 
+               order="hclust",
+               # addCoef.col = "black", # We suppress the coefs to make a cleaner plot
+               tl.col="black", tl.srt=45, #Text label color and rotation
+               diag=FALSE)
+    })
+    
+    
+    
+        
+        
 ###########    
 
 
