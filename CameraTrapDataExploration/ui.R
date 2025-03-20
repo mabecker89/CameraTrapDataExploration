@@ -17,7 +17,7 @@ sidebar <- dashboardSidebar(
     # Initial data check
     menuItem("Data checking", tabName = "map", icon = icon("globe-americas")),
     # Analysis data creation
-    menuItem("Independent Detections", tabName = "ind_detect"),
+    menuItem("Independent Detections", tabName = "ind_detect", icon=icon("fa-solid fa-computer")),
     # Analysis data exploration
     menuItem("Analysis Data Exploration", icon = icon("wpexplorer"),
              menuSubItem("Capture summaries", tabName = "capture"),
@@ -29,6 +29,29 @@ sidebar <- dashboardSidebar(
     menuItem("Report", tabName = "report", icon = icon("book"))
   )
 )
+
+# Welcome page ------------------------------------------------------------------------------------
+
+ui_welcome <- fluidRow(
+  
+  # Map of camera locations
+  column(
+    h2("Welcome to our platform!"), width = 12, style = "font-size: 130%",
+    
+    "This app represents a tool to explore camera trap data in a relatively quick and no-code way.",
+    p(),
+    "It is important that the use the tabs sequentially, as the output of a the follow tab typically depends on the tab previous to it.",
+    p(),
+    "Please try uploading your own camera trap data - if you do not have any download an example dataset here: XXXYYYZZZ link.",
+    p(),
+    ".",
+    HTML("<p>For feedback and feature requests, please post an issue at the <a href='https://github.com/mabecker89/CameraTrapDataExploration/issues'>projects github page</a>!</p>")
+    )
+  
+)
+
+
+
 
 # Upload Data ----------------------------------------------------------------------------------------------------------
 
@@ -155,6 +178,8 @@ ui_ind_detect <- fluidRow(
     
     # Make a button to run the independent detections
     p(),
+    "Click the button below to create your independent data. Note - depending on the size of your dataset this may take some time.",
+    p(),
     actionButton("ind_run", "Generate independent detections", class = "btn-lg btn-success"),
     p(),
     uiOutput("selected_analysis_file"),
@@ -187,14 +212,17 @@ ui_capture <- fluidRow(
 ui_temporal <- fluidRow(
   
   column(12, titlePanel("Temporal trends")),  # Full-width title
-
+  "The following plot shows you how many cameras you have active each month (top panel) and the total monthly capture rate (irrespective of species) on the bottom panel.",
+  p(),
   fluidRow(  # First row for static plots
      column(12, plotlyOutput("camera_effort_plot", height="700px"))  
 
   ),
 
   hr(),  # Horizontal line separator
-
+  "You can also see the capture rate through time for each of the species included in the species list:",
+  p(),
+  
   fluidRow(  # Second row for species selection and dynamic plot
     column(4,
            selectInput("selected_species", "Select Species:",
@@ -212,6 +240,8 @@ ui_temporal <- fluidRow(
 ui_spatial_caps <- fluidRow(
   
   column(12,  titlePanel("Species Capture Rate Map")),
+  "The following plot allows you to see where you accrued detections for each of your species classifications. Select from the drop down menu to vary the species.",
+  p(),
   
   fluidRow(
       column(12, 
@@ -226,6 +256,7 @@ ui_spatial_caps <- fluidRow(
   fluidRow(
       column(12,  titlePanel("Spatial co-occurences"))
       ),
+  "The following plot shows the co-occurance correlations between different species in your survey:",
   p(),
   fluidRow(
     column(12, 
@@ -247,7 +278,7 @@ body <- dashboardBody(
   shinyFeedback::useShinyFeedback(),
   shinyjs::useShinyjs(),
   tabItems(
-    tabItem("home"),
+    tabItem("home", ui_welcome),
     tabItem("upload", ui_custom_values),
     tabItem("map", ui_map),
     tabItem("ind_detect",ui_ind_detect),
