@@ -223,7 +223,7 @@ server <- function(input, output, session) {
       height=length(levels(deployments$placename))*20)
   })
 
-  #update the count  dropdown dynamically based on available numeric inputs
+  # Update the count dropdown dynamically based on available numeric inputs
   observe({
     updateSelectInput(session, "ind_count", choices = names(data_store$dfs[["images.csv"]])[sapply(data_store$dfs[["images.csv"]], function(col) is.numeric(col) && all(col == floor(col)))])
   })

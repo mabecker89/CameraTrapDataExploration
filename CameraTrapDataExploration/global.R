@@ -20,7 +20,7 @@ library(patchwork)
 library(corrplot)
 
 # Set max file size to 25 MB
-options(shiny.maxRequestSize = 25 * 1024^2)
+options(shiny.maxRequestSize = 100 * 1024^2)
 
 # Source functions
 source("src.R")
