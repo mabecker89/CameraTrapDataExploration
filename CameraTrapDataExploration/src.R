@@ -125,7 +125,7 @@ create_ind_detect <- function(deployments, images, threshold, count_column) {
     summarise(event_groupsize = max(animal_count))
   
   # Calculate the duration and add the other elements
-  diff <-  top |>
+  diff <- top |>
     left_join(bot, by = "event_id") |>
     mutate(event_duration = abs(int_length(timestamp %--% timestamp_end))) |>
     left_join(event_grp, by = "event_id") |>
@@ -163,7 +163,7 @@ create_ind_detect <- function(deployments, images, threshold, count_column) {
   
   results[["camera_locations"]] <- cam_locs
   
-  # Create a list of species indentified to genus level or higher
+  # Create a list of species identified to genus level or higher
   taxonomy_headings <- c("class", "order", "family", "genus", "species", "sp" , "common_name")
   
   # Subset the image data to just those columns

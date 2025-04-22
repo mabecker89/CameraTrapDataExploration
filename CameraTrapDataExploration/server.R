@@ -65,14 +65,85 @@ server <- function(input, output, session) {
     # HOUSEKEEPING
     # Format appropriate dates and create a species column
     if (length(dfs) > 0) {
-      dfs[["images.csv"]]$sp <- paste0(dfs[["images.csv"]]$genus, ".", dfs[["images.csv"]]$species)
-      dfs[["images.csv"]]$timestamp <- ymd_hms(dfs[["images.csv"]]$timestamp)
-      dfs[["deployments.csv"]]$start_date <- ymd_hms(dfs[["deployments.csv"]]$start_date)
-      dfs[["deployments.csv"]]$end_date <- ymd_hms(dfs[["deployments.csv"]]$end_date)
-      dfs[["deployments.csv"]]$days <- interval(dfs[["deployments.csv"]]$start_date, dfs[["deployments.csv"]]$end_date)/ddays(1)
-      # Add a placename variable to the image data. Its really useful
-      dfs[["images.csv"]] <- left_join(dfs[["images.csv"]], dfs[["deployments.csv"]][,c("deployment_id", "placename")])
-    } 
+      
+      if ("images.csv" %in% names(dfs)) {
+        dfs[["images.csv"]]$sp <- paste0(dfs[["images.csv"]]$genus, ".", dfs[["images.csv"]]$species)
+        dfs[["images.csv"]]$timestamp <- ymd_hms(dfs[["images.csv"]]$timestamp)
+      }
+      
+      if ("deployments.csv" %in% names(dfs)) {
+        dfs[["deployments.csv"]]$start_date <- ymd_hms(dfs[["deployments.csv"]]$start_date)
+        dfs[["deployments.csv"]]$end_date <- ymd_hms(dfs[["deployments.csv"]]$end_date)
+        dfs[["deployments.csv"]]$days <- interval(
+          dfs[["deployments.csv"]]$start_date,
+          dfs[["deployments.csv"]]$end_date
+        ) / ddays(1)
+      }
+      
+      # Only join if both exist
+      if (all(c("images.csv", "deployments.csv") %in% names(dfs))) {
+        dfs[["images.csv"]] <- left_join(
+          dfs[["images.csv"]],
+          dfs[["deployments.csv"]][, c("deployment_id", "placename")],
+          by = "deployment_id"
+        )
+      }
+    }
+    
+    # WildTrax main reports
+    
+    if (any(str_detect(names(dfs), "main_report.csv$"))) {
+      
+      # Find name that ends in "main_report.csv"
+      idx <- grep("main_report.csv$", names(dfs))
+      
+      # Rename that element to main_report.csv
+      names(dfs)[idx] <- "main_report.csv"
+      
+      # Create deployments.csv
+      dfs[["deployments.csv"]] <- dfs[["main_report.csv"]] |>
+        group_by(project_id, location, latitude, longitude) |>
+        summarise(start_date = min(as.Date(image_date_time)),
+                  end_date = max(as.Date(image_date_time))) |>
+        mutate(deployment_id = paste0(location, "_", start_date),
+               feature_type = "") |>
+        select(project_id, deployment_id, placename = location, longitude, latitude, start_date, end_date, feature_type) |>
+        ungroup() |>
+        mutate(days = interval(start_date, end_date) / ddays(1))
+      
+      # Create images.csv
+      dfs[["images.csv"]] <- dfs[["main_report.csv"]] |>
+        filter(!species_common_name %in% c("STAFF/SETUP", "Human"),
+               !individual_count == "VNA") |>
+        group_by(image_date_time) |>
+        filter(row_number() == 1) |>
+        ungroup() |>
+        mutate(is_blank = ifelse(species_common_name == "NONE", 1, 0),
+               class = "Mammalia",
+               family = "",
+               genus = "",
+               order = "",
+               sp = str_replace_all(species_common_name, " |, ", "."),
+               individual_count = as.numeric(individual_count),
+               placename = location,
+               common_name = species_common_name) |>
+        select(project_id,
+               deployment_id = location,
+               placename,
+               is_blank,
+               class,
+               species = species_common_name,
+               common_name,
+               sp,
+               timestamp = image_date_time,
+               number_of_objects = individual_count,
+               age = age_class,
+               sex = sex_class,
+               family, genus, order)
+      
+      # Remove main_report.csv
+      dfs <- dfs[!grepl("main_report.csv$", names(dfs))]
+    }
     
     # Ensure the reactiveValues object updates properly
     isolate({
@@ -252,7 +323,6 @@ server <- function(input, output, session) {
 
     # Hide spinner when processing is done
     w$hide()
-    
     
     # Dropdown to select a file to preview
     output$selected_analysis_file <- renderUI({
