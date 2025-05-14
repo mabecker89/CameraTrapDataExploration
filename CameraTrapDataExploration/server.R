@@ -26,7 +26,7 @@ server <- function(input, output, session) {
       if (grepl("\\.csv$", file_name, ignore.case = TRUE)) {
         
         # Directly read CSV file
-        dfs[[file_name]] <- read.csv(file_path, stringsAsFactors = FALSE)
+        dfs[[file_name]] <- read_csv(file_path)
         
       } else if (grepl("\\.zip$", file_name, ignore.case = TRUE)) {
         
@@ -47,7 +47,7 @@ server <- function(input, output, session) {
         
         # Read all extracted CSVs
         for (csv in csv_files) {
-          dfs[[basename(csv)]] <- read.csv(csv, stringsAsFactors = FALSE)
+          dfs[[basename(csv)]] <- read_csv(csv)
         }
       }
     }
