@@ -38,7 +38,7 @@ projects <- read_csv("projects.csv")
 images <- left_join(images, deployments[,c("deployment_id", "placename")])
 
 # Parameters
-title <- "Camera Trap Data Exploration"
+title <- "Camera Trap Exploration Tool"
 skin <- "green"
 map_height <- 600
 

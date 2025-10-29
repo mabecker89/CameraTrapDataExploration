@@ -13,7 +13,7 @@ sidebar <- dashboardSidebar(
     # Home tab
     menuItem("Home", tabName = "home", icon = icon("home")),
     # Upload camera trap data
-    menuItem("Upload", tabName = "upload", icon = icon("table")),
+    menuItem("File Upload", tabName = "upload", icon = icon("table")),
     # Initial data check
     menuItem("Data checking", tabName = "map", icon = icon("globe-americas")),
     # Analysis data creation
@@ -36,16 +36,24 @@ ui_welcome <- fluidRow(
   
   # Map of camera locations
   column(
-    h2("Welcome to our platform!"), width = 12, style = "font-size: 130%",
+    h2("WildCAM: camera trap data exploration tool"), width = 12, style = "font-size: 130%",
     
-    "This app represents a tool to explore camera trap data in a relatively quick and no-code way.",
+    "This app represents a tool to explore camera trap data in a quick and no-code way.",
     p(),
-    "It is important that the use the tabs sequentially, as the output of a the follow tab typically depends on the tab previous to it.",
+    HTML("To use this tool, <b>you must follow three simple rules</b>:"),
     p(),
-    "Please try uploading your own camera trap data - if you do not have any download an example dataset here: XXXYYYZZZ link.",
+    "1. Use the tabs sequentially, as the output of a the follow tab typically depends on the tab previous to it.",
     p(),
-    ".",
-    HTML("<p>For feedback and feature requests, please post an issue at the <a href='https://github.com/mabecker89/CameraTrapDataExploration/issues'>projects github page</a>!</p>")
+    "2. Your data must either be .zip files from the Wildlife Insights or WildTrax platforms, or a set of .csv files with the same names and formats as from those platforms. We have provided templates in this folder [LINK TBC]",
+    p(),
+    "3. If you do not have any existing data, download an example dataset here: [LINK TBC].",
+    p(),
+    p(),
+    HTML("For feedback and feature requests, please post an issue at the <a href='https://github.com/mabecker89/CameraTrapDataExploration/issues'>projects github page</a>!"),
+    p(),
+    p(),
+    HTML("This creation of this tool has been financed by <a href='https://wildcams.ca/'>WildCAM</a> (Wildlife Cameras for Adaptive Management) - a camera trap network aiming to support effective management and conservation of terrestrial wildlife in British Columbia and beyond."),
+    tags$img(src = "https://wildcams.ca/site/templates/img/logo-twocolour.png", width = "50%")
     )
   
 )
@@ -90,9 +98,9 @@ ui_custom_values <- fluidRow(
       
       h2("Upload Camera Trap Data"), width = 12, style = "font-size: 130%",
       
-      "Here you may add your own camera trap data to explore using this app.",
+      "Please upload your own camera trap data using the blue action buttom below.",
       p(),
-      "Please make sure the format is the same as Wildlife Insights output.",
+      "We currently support raw exports from the Wildlife Insights and WildTrax platforms, or single sheets which are formatted to match their formatting",
       p(),
       "Once the data is uploaded, you can explore the analysis tabs on the left.",
       p(),
@@ -100,7 +108,7 @@ ui_custom_values <- fluidRow(
       p(),
       
      fileInput("files", 
-               label = "Upload individual files or a ZIP folder:",
+               label = "Upload a ZIP folder or individual files (.csv or Excel):",
                multiple = TRUE,
                buttonLabel = "Upload Data",
                placeholder = "No file selected",
@@ -141,13 +149,17 @@ ui_map <- fluidRow(
          
   
   # Camera activity check
-  box(h2("Camera activity"), width = 12, style = "font-size: 130%", 
+  box(h2("Camera activity"), width = 12, style = "font-size: 110%",
       
       "The following plot represents the periods of time there was a camera deployed at each placename (black lines).",
       p(),
-      "The black dots represent each time a different deployment period starts and ends.",
+      "The black dots represent each time a different camera deployment starts and ends",
       p(),
-      "The orange blocks represent the period of time between the first and last image for each deployment.",
+      "The orange blocks represent the period of time between the first and last image for each deployment. ",
+      p(),
+      HTML("<b>Important note 1</b> - if the orange blocks appear outside the black lines then there is a mismatch between your deployment dates and the image timestamps. Return to your camera trap data management software to address this issue then re-export your data"),
+      p(),
+      HTML("<b>Important note 2</b> - any image data falling outside of the black lines will be removed at the <i>'Generate independent detections'</i> step, and not feature in subsequent data summaries."),
       p(),
       plotlyOutput(outputId = "deployment_dates", height = "auto"))
   

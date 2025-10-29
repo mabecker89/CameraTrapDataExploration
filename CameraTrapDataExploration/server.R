@@ -72,8 +72,8 @@ server <- function(input, output, session) {
       }
       
       if ("deployments.csv" %in% names(dfs)) {
-        dfs[["deployments.csv"]]$start_date <- ymd_hms(dfs[["deployments.csv"]]$start_date)
-        dfs[["deployments.csv"]]$end_date <- ymd_hms(dfs[["deployments.csv"]]$end_date)
+        dfs[["deployments.csv"]]$start_date <- ymd(dfs[["deployments.csv"]]$start_date)
+        dfs[["deployments.csv"]]$end_date <- ymd(dfs[["deployments.csv"]]$end_date)
         dfs[["deployments.csv"]]$days <- interval(
           dfs[["deployments.csv"]]$start_date,
           dfs[["deployments.csv"]]$end_date
@@ -213,8 +213,10 @@ server <- function(input, output, session) {
       # add a layer control box to toggle between the layers
       addLayersControl(
         baseGroups = c("Satellite", "Base"),
-        options = layersControlOptions(collapsed = FALSE)
-      )
+        options = layersControlOptions(collapsed = FALSE)) |>
+      #Add a scale bar
+      addScaleBar(position = "topleft")
+
     
   })
   
