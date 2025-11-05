@@ -8,6 +8,7 @@ header <- dashboardHeader(
 )
 
 sidebar <- dashboardSidebar(
+  tags$img(src = "https://wildcams.ca/site/templates/img/logo-twocolour.png", width = "100%", style = "padding: 10px;"),
   sidebarMenu(
     id = "tabs",
     # Home tab
@@ -38,21 +39,23 @@ ui_welcome <- fluidRow(
   column(
     h2("WildCAM: camera trap data exploration tool"), width = 12, style = "font-size: 130%",
     
-    "This app represents a tool to explore camera trap data in a quick and no-code way.",
+    "This app represents a tool to explore annotated camera trap data in a quick and no-code way.",
     p(),
-    HTML("To use this tool, <b>you must follow three simple rules</b>:"),
+    HTML("To use this tool, <b>you must follow two simple rules</b>:"),
     p(),
     "1. Use the tabs sequentially, as the output of a the follow tab typically depends on the tab previous to it.",
     p(),
     "2. Your data must either be .zip files from the Wildlife Insights or WildTrax platforms, or a set of .csv files with the same names and formats as from those platforms. We have provided templates in this folder [LINK TBC]",
     p(),
-    "3. If you do not have any existing data, download an example dataset here: [LINK TBC].",
+    p(),
+    "If you do not have any existing data, download an example dataset here: [LINK TBC].",
     p(),
     p(),
     HTML("For feedback and feature requests, please post an issue at the <a href='https://github.com/mabecker89/CameraTrapDataExploration/issues'>projects github page</a>!"),
     p(),
     p(),
-    HTML("This creation of this tool has been financed by <a href='https://wildcams.ca/'>WildCAM</a> (Wildlife Cameras for Adaptive Management) - a camera trap network aiming to support effective management and conservation of terrestrial wildlife in British Columbia and beyond."),
+    HTML("This creation of this tool has been developed by <a href='https://wildcams.ca/'>WildCAM</a> (Wildlife Cameras for Adaptive Management) - a camera trap network aiming to support effective management and conservation of terrestrial wildlife in British Columbia and beyond, and supported by the BC Government"),
+    p(),
     tags$img(src = "https://wildcams.ca/site/templates/img/logo-twocolour.png", width = "50%")
     )
   
@@ -96,15 +99,17 @@ ui_custom_values <- fluidRow(
     tags$head(tags$style(custom_style)),
     box(
       
-      h2("Upload Camera Trap Data"), width = 12, style = "font-size: 130%",
+      h2("Upload Your Data"), width = 12, style = "font-size: 130%",
       
-      "Please upload your own camera trap data using the blue action buttom below.",
+      "Please upload your camera trap data files using the blue action buttom below.",
       p(),
-      "We currently support raw exports from the Wildlife Insights and WildTrax platforms, or single sheets which are formatted to match their formatting",
+      h3("We currently support either:"),
+      tags$ul(
+        tags$li("raw data exports from the Wildlife Insights and WildTrax platforms (.zip files)"),
+        tags$li("single sheets which are formatted to match their formatting (see the [LINK XYZ] for template formats])"),
+       ),
       p(),
-      "Once the data is uploaded, you can explore the analysis tabs on the left.",
-      p(),
-      "You can upload your data either as multiple csv or Excel files, or as a zipped folder.",
+      "Uploaded data can be previewed using the dropdown list below.",
       p(),
       
      fileInput("files", 
@@ -138,11 +143,11 @@ ui_map <- fluidRow(
   column(
       h2("Camera locations"), width = 12, style = "font-size: 130%",
          
-         "The following map represents the locations of your cameras in your deployment data.",
+         "The following map represents the locations of your cameras in your 'deployment' data.",
          p(),
-         "You can click on the individual icons to see the placenames.",
+         "You can hover over the individual icons to see the placenames and its GPS coordinates.",
          p(),
-         "If a camera is projecting in an incorrect location, you will need to return to your data manager and update it there.",
+         "If a camera is projecting in an incorrect location, you will need to return to your data manager, update it there, then re-import your data.",
          p(),
          
          leafletOutput("map", width = "100%", height = map_height),  
@@ -151,13 +156,17 @@ ui_map <- fluidRow(
   # Camera activity check
   box(h2("Camera activity"), width = 12, style = "font-size: 110%",
       
-      "The following plot represents the periods of time there was a camera deployed at each placename (black lines).",
+      "The following plot represents the periods of time there was a camera deployed at each placename.",
       p(),
-      "The black dots represent each time a different camera deployment starts and ends",
+      h3("Key:"),
+      tags$ul(
+        tags$li("Black dots represent each time a camera deployment starts"),
+        tags$li("Grey triangles represent when a deployment ends"),
+        tags$li("Black lines connect deployment start and end points (showing when the camera is active)"),
+        tags$li("If you hover over the start/end points you will get its corresponding 'deployment_id' code and the date - useful for diagnosing mismatches"),
+        tags$li("Orange blocks represent the period of time between the first and last image associated with each deployment.")),
       p(),
-      "The orange blocks represent the period of time between the first and last image for each deployment. ",
-      p(),
-      HTML("<b>Important note 1</b> - if the orange blocks appear outside the black lines then there is a mismatch between your deployment dates and the image timestamps. Return to your camera trap data management software to address this issue then re-export your data"),
+      HTML("<b>Important note 1</b> - if an orange block appears outside the camera activity periods (black lines) then there is a mismatch between your deployment dates and the image timestamps. Return to your camera trap data management software to address this issue then re-export your data."),
       p(),
       HTML("<b>Important note 2</b> - any image data falling outside of the black lines will be removed at the <i>'Generate independent detections'</i> step, and not feature in subsequent data summaries."),
       p(),

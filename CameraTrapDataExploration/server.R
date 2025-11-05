@@ -188,13 +188,22 @@ server <- function(input, output, session) {
    
   # Reactive Map ------------------------------------------------------------------------
   output$map <- renderLeaflet({
-    
+    validate(
+      need(data_store$dfs[["deployments.csv"]], 
+           "Please upload deployment data to view this content")
+    )
     #req(data_store())
     deployments<- data_store$dfs[["deployments.csv"]]
     locs <- deployments |>
       select(placename, longitude, latitude) |>
       distinct() |>
       st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+    #specify the station label 
+    locs$label_text <- paste0(
+      locs$placename, "<br>",
+      "Lat: ", round(st_coordinates(locs)[,1], 5), "<br>",
+      "Long: ", round(st_coordinates(locs)[,2], 5)
+    )
     
     cam <- makeAwesomeIcon(
       icon = "camera",
@@ -208,7 +217,7 @@ server <- function(input, output, session) {
       # Add a satellite image layer
       addProviderTiles(providers$Esri.WorldImagery, group="Satellite") |>  
       addProviderTiles(providers$Esri.WorldTopoMap, group="Base") |>    
-      addAwesomeMarkers(popup=paste(locs$placename),
+      addAwesomeMarkers(label = ~lapply(label_text, HTML),
                         icon = cam) |>
       # add a layer control box to toggle between the layers
       addLayersControl(
@@ -223,6 +232,11 @@ server <- function(input, output, session) {
   # Deployment check -----------------------------------------------------------
   
   output$deployment_dates <- renderPlotly({
+    
+    validate(
+      need(data_store$dfs[["deployments.csv"]], 
+           "Please upload deployment and image data to view this content")
+    )
     
     # Call the saved data
     deployments <- data_store$dfs[["deployments.csv"]]
@@ -260,19 +274,25 @@ server <- function(input, output, session) {
                        # make a line that also has points
                        mode = "lines",
                        # Add the deployment ID as hover text
-                       hovertext=tmp$deployment_id[j],
+                       hovertext=paste0(tmp$deployment_id[j]),
+                                        #,"<br>",
+                                        #,"Start: ",min(tmp_img$timestamp), "<br>",
+                                        #,"End: ", max(tmp_img$timestamp)),           # NOT WORKING CURRENTLY
                        color=I("orange"),
                        # Color it all black
                        line=list(
                        width=8,
-                       opacity=0.7),
+                       opacity=0.5),
                        # Suppress the legend
                        showlegend = FALSE)
             }
-        # Add a black line to 'p' denotting the start and end periods of each deployment
+        # Add a black line to 'p' denotting the start and end periods of each deployment + we add one to the end dat as it plots at mignight and looks like some image data fall outside of the deployment window
         p <- add_trace(p, 
                        #Use the start and end date as x coordinates
-                       x = c(tmp$start_date[j], tmp$end_date[j]), 
+                       #x = c(tmp$start_date[j], tmp$end_date[j]), 
+                       x = c(as.POSIXct(paste(tmp$start_date[j], "00:01:00"), format = "%Y-%m-%d %H:%M:%S"),
+                             as.POSIXct(paste(tmp$end_date[j], "23:59:00"), format = "%Y-%m-%d %H:%M:%S")),
+                       
                        #Use the counter for the y coordinates
                        y = c(i,i), 
                        # State the type of chart
@@ -282,7 +302,13 @@ server <- function(input, output, session) {
                        # Add the deployment ID as hover text
                        hovertext=tmp$deployment_id[j], 
                        # Color it all black
-                       color=I("black"), 
+                       color=I("black"),
+                       
+                       marker = list(
+                         symbol = c("circle", "triangle-left"),
+                         size = 7,
+                         color=c("black", "grey")),
+                       
                        # Suppress the legend
                        showlegend = FALSE)
       }
