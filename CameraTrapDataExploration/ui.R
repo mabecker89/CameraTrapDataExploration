@@ -54,7 +54,8 @@ ui_welcome <- fluidRow(
     HTML("For feedback and feature requests, please post an issue at the <a href='https://github.com/mabecker89/CameraTrapDataExploration/issues'>projects github page</a>!"),
     p(),
     p(),
-    HTML("This creation of this tool has been developed by <a href='https://wildcams.ca/'>WildCAM</a> (Wildlife Cameras for Adaptive Management) - a camera trap network aiming to support effective management and conservation of terrestrial wildlife in British Columbia and beyond; the BC Government; and "),
+    HTML("This creation of this tool has been supported by <a href='https://wildcams.ca/'>WildCAM</a> (Wildlife Cameras for Adaptive Management); 
+         the BC Government; and NSERC."),
     p(),
     tags$img(src = "https://raw.githubusercontent.com/mabecker89/CameraTrapDataExploration/refs/heads/main/imgs/merged%20logos.png",
          style = "max-width: 500px; height: auto;")
