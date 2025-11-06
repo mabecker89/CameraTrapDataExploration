@@ -227,9 +227,17 @@ ui_capture <- fluidRow(
     
     "This page creates summaries of your independent detections.",
     p(),
-    plotlyOutput(outputId = "capture_summary", height = "auto"))
- 
+    conditionalPanel(
+      condition = "output.button_clicked == false",
+      box(
+        width = 12,
+        h4("Independent detections not yet created.", style = "color: #777; text-align: center; padding: 20px;")
+      )
+    ),
+    uiOutput("capture_summary_output")
+  )
 )
+
 
 # Temporal patterns ----------------------------------------------------------------------------------------------------------
 
@@ -239,54 +247,37 @@ ui_temporal <- fluidRow(
   column(12, titlePanel("Temporal trends")),  # Full-width title
   "The following plot shows you how many cameras you have active each month (top panel) and the total monthly capture rate (irrespective of species) on the bottom panel.",
   p(),
-  fluidRow(  # First row for static plots
-     column(12, plotlyOutput("camera_effort_plot", height="700px"))  
-
-  ),
-
-  hr(),  # Horizontal line separator
-  "You can also see the capture rate through time for each of the species included in the species list:",
-  p(),
   
-  fluidRow(  # Second row for species selection and dynamic plot
-    column(4,
-           selectInput("selected_species", "Select Species:",
-                       choices = NULL)
-    ),
-    column(8, plotOutput("species_trends_plot"))  # Interactive Plot
-  )  
+  conditionalPanel(
+    condition = "output.button_clicked == false",
+    box(
+      width = 12,
+      h4("Independent detections not yet created.", style = "color: #777; text-align: center; padding: 20px;")
+    )
+  ),
+  
+  uiOutput("temporal_plots_output")
 )
 
 
 
 # Spatial maps of captures  ----------------------------------------------------------------------------------------------------------
 
-
 ui_spatial_caps <- fluidRow(
   
-  column(12,  titlePanel("Species Capture Rate Map")),
+  column(12, titlePanel("Species Capture Rate Map")),
   "The following plot allows you to see where you accrued detections for each of your species classifications. Select from the drop down menu to vary the species.",
   p(),
   
-  fluidRow(
-      column(12, 
-             selectInput("selected_species_map", "Select Species:",
-                  choices = NULL))
-      ),
-    
-  fluidRow(
-      column(12,leafletOutput("capture_map"))
-      ),
-  hr(),
-  fluidRow(
-      column(12,  titlePanel("Spatial co-occurences"))
-      ),
-  "The following plot shows the co-occurance correlations between different species in your survey:",
-  p(),
-  fluidRow(
-    column(12, 
-           plotOutput("corrplot"))
-  )
+  conditionalPanel(
+    condition = "output.button_clicked == false",
+    box(
+      width = 12,
+      h4("Independent detections not yet created.", style = "color: #777; text-align: center; padding: 20px;")
+    )
+  ),
+  
+  uiOutput("spatial_plots_output")
 )
 
 

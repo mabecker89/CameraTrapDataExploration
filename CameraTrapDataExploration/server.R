@@ -9,6 +9,10 @@ server <- function(input, output, session) {
   # Reactive expression to read in the data files provided by the user
   data_store <- reactiveValues(dfs = list())
   analysis_data_store <- reactiveValues(results = list())
+  results_store <- reactiveValues(data = NULL)
+  # An a flag to show when the results are ready for appropriate error messages
+  results_ready <- reactiveVal(FALSE)
+  button_clicked <- reactiveVal(FALSE)
   
   observeEvent(input$files, {
     
@@ -354,8 +358,19 @@ server <- function(input, output, session) {
   # Create waiter instance (for showing users that something is happening when they click on the button)
   w <- Waiter$new(id = "ind_run", html = spin_ellipsis(), color = "grey20")
   
+  
+  # Track when the button is clicked
+  output$button_clicked <- reactive({
+    button_clicked()
+  })
+  outputOptions(output, "button_clicked", suspendWhenHidden = FALSE)
+  
+  
   # When you click run on the ui, the following happens
   observeEvent(input$ind_run, {
+    
+    # Set button clicked flag
+    button_clicked(TRUE)
     
     # Show spinner when processing starts
     w$show()
@@ -369,6 +384,11 @@ server <- function(input, output, session) {
                                  threshold = input$ind_thresh,
                                  count_column = input$ind_count)
    
+    # Store results in reactive value so they are accessible later!
+    results_store$data <- results
+    
+    # Set the Results flag to TRUE
+    results_ready(TRUE)
 
     # Hide spinner when processing is done
     w$hide()
@@ -376,25 +396,25 @@ server <- function(input, output, session) {
     # Dropdown to select a file to preview
     output$selected_analysis_file <- renderUI({
       
-      req(length(results) > 0)  # Ensure data exists
+      req(length(results_store$data) > 0)  # Ensure data exists
       
       selectInput("analysis_choice", "Select an analysis file to preview:",
-                  choices = names(results),
-                  selected = names(results)[1])
+                  choices = names(results_store$data),
+                  selected = names(results_store$data)[1])
       
     })
     
     # Render a preview of the selected file
     output$custom_analysis_data_preview <- renderDT({
       
-      req(input$analysis_choice, results)
+      req(input$analysis_choice, results_store$data)
       
-      DT::datatable(results[[input$analysis_choice]],
+      DT::datatable(results_store$data[[input$analysis_choice]],
                     options = list(scrollX = TRUE))
   })
   
     output$results_box <- renderUI({
-      req(results)  # Only render when results exists
+      req(results_store$data)  # Only render when results exists
       
       box(
         title = "Independent data",
@@ -414,17 +434,17 @@ server <- function(input, output, session) {
         paste0("ind_data_",  input$ind_thresh,"_mins_", format(Sys.Date(), "%Y%m%d"), ".zip")
       },
       content = function(file) {
-        req(results)
+        req(results_store$data)
         
         # Create a temporary directory
         temp_dir <- tempfile()
         dir.create(temp_dir)
         
         # Write each dataframe as a CSV file
-        for (i in seq_along(results)) {
-          csv_name <- paste0(names(results)[i], ".csv")
+        for (i in seq_along(results_store$data)) {
+          csv_name <- paste0(names(results_store$data)[i], ".csv")
           csv_path <- file.path(temp_dir, csv_name)
-          write.csv(results[[i]], csv_path, row.names = FALSE)
+          write.csv(results_store$data[[i]], csv_path, row.names = FALSE)
         }
         
         # Get list of files to zip
@@ -443,87 +463,134 @@ server <- function(input, output, session) {
 ######################      
 # detection summaries -----------------------------------------------------------    
     
+    
+    # Set up the error message if the independent data doesnt exist
+    output$capture_summary_output <- renderUI({
+      if (!results_ready()) {
+        # Show message when results don't exist but button was clicked
+        box(
+          width = 12,
+          h4("Independent data not yet created", style = "color: #777; text-align: center; padding: 20px;")
+        )
+      } else {
+        # Show the plot when results exist
+        plotlyOutput(outputId = "capture_summary", height = "auto")
+      }
+    })
+    
+    
+    # Create the plotly plot
     output$capture_summary <- renderPlotly({
+      
+      req(results_ready())
       
       # Call the saved data
       deployments <- data_store$dfs[["deployments.csv"]]
       images <- data_store$dfs[["images.csv"]]
       
-    long_obs <- results[["independent_total_observations"]] %>% 
-      pivot_longer(cols=results[["species_list"]]$sp,  # The columns we want to create into rows - species
-                   names_to="sp",       # What we what the number column to be called
-                   values_to = "count") # Takes the values in the species columns and calls them `count`
-    
-    
-    # We can them summaries those using dplyr
-    tmp <- long_obs %>%                   # Take the long observation data frame `long_obs` 
-      group_by(sp) %>%            # Group by species
-      summarise(count=sum(count)) # Sum all the independent observations
-    
-    # Add it to the sp_summary dataframe
-    sp_summary <- left_join(results[["species_list"]], tmp)
-    
-    # Calculate raw occupancy
-    # We use the mutate function to mutate the column
-    total_binary <-   results[["independent_total_observations"]] %>%    # The total obs dataframe              
-      mutate(across(results[["species_list"]]$sp, ~+as.logical(.x)))  # across all of the species columns, make it binary
-    
-    # Flip the dataframe to longer - as before
-    long_bin <- total_binary %>% 
-      pivot_longer(cols=results[["species_list"]]$sp, names_to="sp", values_to = "count") # Takes the species names columns, and makes them unique rows with "sp" as the key 
-    
-    # We can now sum the presence/absences and divide by the number of survey locations
-    tmp <- long_bin %>% 
-      group_by(sp) %>% 
-      summarise(occupancy=sum(count)/nrow(results[["camera_locations"]])) # divided the sum by the number of sites
-    
-    # add the results to the sp_summary
-    sp_summary <- left_join(sp_summary, tmp)
-    
-    # Order the summaries to something sensible
-    sp_summary <- sp_summary[order(sp_summary$count),]
-    
-    yform <- list(categoryorder = "array",
-                  categoryarray = sp_summary$sp)
-    
-    xform <- list(title="Captures")
-    
-    # Capture rate
-    fig1 <- plot_ly(x = sp_summary$count, y = sp_summary$sp, type = 'bar', orientation = 'h', name="count") %>% 
-      layout(yaxis = yform, xaxis=xform, height=nrow(sp_summary)*20) # Try to control the height
-    
-    yform <- list(categoryorder = "array",
-                  categoryarray = sp_summary$sp,
-                  showticklabels=F)
-    xform <- list(title="Occupancy")
-    
-    
-    # Occupancy
-    fig2 <- plot_ly(x = sp_summary$occupancy, y = sp_summary$sp, type = 'bar', orientation = 'h', name="occupancy") %>% 
-      layout(yaxis = yform, xaxis=xform)
-    
-    subplot(nrows=1,fig1, fig2, titleX = T)
-    
+      long_obs <- results_store$data[["independent_total_observations"]] %>% 
+        pivot_longer(cols=results_store$data[["species_list"]]$sp,  # The columns we want to create into rows - species
+                     names_to="sp",       # What we what the number column to be called
+                     values_to = "count") # Takes the values in the species columns and calls them `count`
+      
+      
+      # We can them summaries those using dplyr
+      tmp <- long_obs %>%                   # Take the long observation data frame `long_obs` 
+        group_by(sp) %>%            # Group by species
+        summarise(count=sum(count)) # Sum all the independent observations
+      
+      # Add it to the sp_summary dataframe
+      sp_summary <- left_join(results_store$data[["species_list"]], tmp)
+      
+      # Calculate raw occupancy
+      # We use the mutate function to mutate the column
+      total_binary <-   results_store$data[["independent_total_observations"]] %>%    # The total obs dataframe              
+        mutate(across(results_store$data[["species_list"]]$sp, ~+as.logical(.x)))  # across all of the species columns, make it binary
+      
+      # Flip the dataframe to longer - as before
+      long_bin <- total_binary %>% 
+        pivot_longer(cols=results_store$data[["species_list"]]$sp, names_to="sp", values_to = "count") # Takes the species names columns, and makes them unique rows with "sp" as the key 
+      
+      # We can now sum the presence/absences and divide by the number of survey locations
+      tmp <- long_bin %>% 
+        group_by(sp) %>% 
+        summarise(occupancy=sum(count)/nrow(results_store$data[["camera_locations"]])) # divided the sum by the number of sites
+      
+      # add the results to the sp_summary
+      sp_summary <- left_join(sp_summary, tmp)
+      
+      # Order the summaries to something sensible
+      sp_summary <- sp_summary[order(sp_summary$count),]
+      
+      yform <- list(categoryorder = "array",
+                    categoryarray = sp_summary$sp)
+      
+      xform <- list(title="Captures")
+      
+      # Capture rate
+      fig1 <- plot_ly(x = sp_summary$count, y = sp_summary$sp, type = 'bar', orientation = 'h', name="count") %>% 
+        layout(yaxis = yform, xaxis=xform, height=nrow(sp_summary)*20) # Try to control the height
+      
+      yform <- list(categoryorder = "array",
+                    categoryarray = sp_summary$sp,
+                    showticklabels=F)
+      xform <- list(title="Occupancy")
+      
+      
+      # Occupancy
+      fig2 <- plot_ly(x = sp_summary$occupancy, y = sp_summary$sp, type = 'bar', orientation = 'h', name="occupancy") %>% 
+        layout(yaxis = yform, xaxis=xform)
+      
+      subplot(nrows=1,fig1, fig2, titleX = T)
+      
     })  
     
- 
+    
+  
+
 #############################
 # Temporal patterns -----------------------------------------------------------    
-
-    
-    # Look for the selected option
-    observe({
-      species_dynamic <- results[["species_list"]]$sp[order(results[["species_list"]]$sp)]
-      updateSelectInput(session, "selected_species", choices = species_dynamic, selected = species_dynamic[1])
+    # Code to show error meesage before indenedent data is created
+    # Temporal plots output
+    output$temporal_plots_output <- renderUI({
+      if (!results_ready()) {
+        box(
+          width = 12,
+          h4("Independent data not yet created", style = "color: #777; text-align: center; padding: 20px;")
+        )
+      } else {
+        species_choices <- results_store$data[["species_list"]]$sp[order(results_store$data[["species_list"]]$sp)]
+        
+        tagList(
+          fluidRow(
+            column(12, plotlyOutput("camera_effort_plot", height="700px"))  
+          ),
+          hr(),
+          "You can also see the capture rate through time for each of the species included in the species list:",
+          p(),
+          fluidRow(
+            column(4,
+                   selectInput("selected_species", "Select Species:",
+                               choices = species_choices,
+                               selected = species_choices[1])
+            ),
+            column(8, plotOutput("species_trends_plot"))
+          )
+        )
+      }
     })
+    
+    
+    ########################
+    
     
  
   # # Static Plot 1: Number of Active Cameras Over Time
   output$camera_effort_plot <- renderPlotly({
 
     # Pull in the right data
-    mon_obs <- results[["independent_monthly_observations"]]
-    sp_summary <- results[["species_list"]]
+    mon_obs <- results_store$data[["independent_monthly_observations"]]
+    sp_summary <- results_store$data[["species_list"]]
     
     mon_summary <- mon_obs %>%        # Use the monthly observations dataframe
       group_by(date) %>%              # Group by the date
@@ -566,8 +633,8 @@ server <- function(input, output, session) {
       req(input$selected_species)  # Ensure a species is selected
       
       # Pull in the right data
-      mon_obs <- results[["independent_monthly_observations"]]
-      sp_summary <- results[["species_list"]]
+      mon_obs <- results_store$data[["independent_monthly_observations"]]
+      sp_summary <- results_store$data[["species_list"]]
       
       mon_summary <- mon_obs %>%        # Use the monthly observations dataframe
         group_by(date) %>%              # Group by the date
@@ -609,19 +676,49 @@ server <- function(input, output, session) {
 #################
 # Spatial patterns 
     
-    # Look for the selected option
-    observe({
-      species_dynamic <- results[["species_list"]]$sp[order(results[["species_list"]]$sp)]
-      updateSelectInput(session, "selected_species_map", choices = species_dynamic, selected = species_dynamic[1])
+   
+    # Code to show error meesage before indenedent data is created
+    # Spatial plots output
+    output$spatial_plots_output <- renderUI({
+      if (!results_ready()) {
+        box(
+          width = 12,
+          h4("Independent data not yet created", style = "color: #777; text-align: center; padding: 20px;")
+        )
+      } else {
+        species_choices <- results_store$data[["species_list"]]$sp[order(results_store$data[["species_list"]]$sp)]
+        
+        tagList(
+          fluidRow(
+            column(12, 
+                   selectInput("selected_species_map", "Select Species:",
+                               choices = species_choices,
+                               selected = species_choices[1]))
+          ),
+          fluidRow(
+            column(12, leafletOutput("capture_map"))
+          ),
+          hr(),
+          fluidRow(
+            column(12, titlePanel("Spatial co-occurences"))
+          ),
+          "The following plot shows the co-occurance correlations between different species in your survey:",
+          p(),
+          fluidRow(
+            column(12, 
+                   plotOutput("corrplot"))
+          )
+        )
+      }
     })
     
-    
+ 
     output$capture_map <- renderLeaflet({
       
       req(input$selected_species_map) 
       
-      wide_obs <- results[["independent_total_observations"]] 
-      locs<- results[["camera_locations"]]
+      wide_obs <- results_store$data[["independent_total_observations"]] 
+      locs<- results_store$data[["camera_locations"]]
       
       total_obs <- left_join(wide_obs, locs)
       
@@ -648,7 +745,7 @@ server <- function(input, output, session) {
     
     output$corrplot <- renderPlot({
       
-      total_obs <- results[["independent_total_observations"]] 
+      total_obs <- results_store$data[["independent_total_observations"]] 
       tmp <- total_obs[,!(colnames(total_obs)%in% c("placename", "days"))]
       M <- cor(tmp[, colSums(tmp)>5])
       
@@ -663,38 +760,12 @@ server <- function(input, output, session) {
                diag=FALSE)
     })
     
-    
+  
     
         
-        
-###########    
-
-
-      # If you need code to check an object      
-      # 
-      # output$test_table <- renderDT({
-      #   mon_obs <- results[["independent_monthly_observations"]]
-      #   
-      #   
-      #   mon_summary <- mon_obs %>%        # Use the monthly observations dataframe
-      #     group_by(date) %>%              # Group by the date
-      #     summarise(locs_active=n(),      # Count the number of active cameras
-      #               cam_days=sum(days))   # And sum the active days 
-      #   
-      #   
-      #   datatable(mon_summary, options = list(pageLength = 5, autoWidth = TRUE))
-      # })
-      
-      
-      
-       
+# End of observeEvent(input$ind_run
 })
   
-  
-  
-  
-  
-    
 
   
 }
