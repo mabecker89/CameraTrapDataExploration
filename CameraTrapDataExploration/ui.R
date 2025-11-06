@@ -8,7 +8,7 @@ header <- dashboardHeader(
 )
 
 sidebar <- dashboardSidebar(
-  tags$img(src = "https://wildcams.ca/site/templates/img/logo-twocolour.png", width = "100%", style = "padding: 10px;"),
+  tags$img(src = "https://raw.githubusercontent.com/mabecker89/CameraTrapDataExploration/refs/heads/main/imgs/wildcam_grey.png", width = "100%", style = "padding: 0px;"),
   sidebarMenu(
     id = "tabs",
     # Home tab
@@ -37,7 +37,7 @@ ui_welcome <- fluidRow(
   
   # Map of camera locations
   column(
-    h2("WildCAM: camera trap data exploration tool"), width = 12, style = "font-size: 130%",
+    h2("Camera trap data exploration tool"), width = 12, style = "font-size: 130%",
     
     "This app represents a tool to explore annotated camera trap data in a quick and no-code way.",
     p(),
@@ -54,9 +54,10 @@ ui_welcome <- fluidRow(
     HTML("For feedback and feature requests, please post an issue at the <a href='https://github.com/mabecker89/CameraTrapDataExploration/issues'>projects github page</a>!"),
     p(),
     p(),
-    HTML("This creation of this tool has been developed by <a href='https://wildcams.ca/'>WildCAM</a> (Wildlife Cameras for Adaptive Management) - a camera trap network aiming to support effective management and conservation of terrestrial wildlife in British Columbia and beyond, and supported by the BC Government"),
+    HTML("This creation of this tool has been developed by <a href='https://wildcams.ca/'>WildCAM</a> (Wildlife Cameras for Adaptive Management) - a camera trap network aiming to support effective management and conservation of terrestrial wildlife in British Columbia and beyond; the BC Government; and "),
     p(),
-    tags$img(src = "https://wildcams.ca/site/templates/img/logo-twocolour.png", width = "50%")
+    tags$img(src = "https://raw.githubusercontent.com/mabecker89/CameraTrapDataExploration/refs/heads/main/imgs/merged%20logos.png",
+         style = "max-width: 500px; height: auto;")
     )
   
 )
@@ -186,28 +187,31 @@ ui_ind_detect <- fluidRow(
 
     "This page creates and stores your independent data.",
     p(),
-    "You first need to specify your inderpendance interval (minimum = 0.01, max = 1000).",
+    "You first need to specify your inderpendance interval in decimal minutes (minimum = 0.01, max = 1000).",
     p(),
     "Note: Most camera trappers use 30.",
     p(),
-    numericInput("ind_thresh", "Minutes:", 10, min = 0.01, max = 1000),
+    numericInput("ind_thresh", "Number of minutes:", 30, min = 0.01, max = 1000),
     "You also need to select the column which specifies your count data (note - only numerical columns are available for selection)",
     p(),
     
     # Select the "count" column. Only give the user numeric inputs as an option
-    selectInput("ind_count", "Choose a Column:", choices = NULL),
+    selectInput("ind_count", "Choose a animal count column:", choices = NULL),
     
     # Make a button to run the independent detections
     p(),
-    "Click the button below to create your independent data. Note - depending on the size of your dataset this may take some time.",
+    HTML("<b>Click the green button below to create your independent data:</b>"),
+    p(),
+    HTML("<i>25,000 images took 12 seconds in testing. </i>"),
     p(),
     actionButton("ind_run", "Generate independent detections", class = "btn-lg btn-success"),
     p(),
+    "You can download your independent datasets once the code is finished running.",
+    p(),
     uiOutput("selected_analysis_file"),
     
-    box(h3("Analysis Data Preview"), 
-        width = 12,
-        DTOutput(outputId = "custom_analysis_data_preview"))
+    uiOutput("results_box")
+    
     
     )
 

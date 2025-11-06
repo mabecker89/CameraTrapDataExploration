@@ -105,7 +105,7 @@ server <- function(input, output, session) {
         group_by(project_id, location, latitude, longitude) |>
         summarise(start_date = min(as.Date(image_date_time)),
                   end_date = max(as.Date(image_date_time))) |>
-        mutate(deployment_id = paste0(location, "_", start_date),
+        mutate(deployment_id = paste0(location),   #, "_", start_date),
                feature_type = "") |>
         select(project_id, deployment_id, placename = location, longitude, latitude, start_date, end_date, feature_type) |>
         ungroup() |>
@@ -128,7 +128,7 @@ server <- function(input, output, session) {
                placename = location,
                common_name = species_common_name) |>
         select(project_id,
-               deployment_id = location,
+               deployment_id = location,                      # This nees to change if we want to include multiple deployments
                placename,
                is_blank,
                class,
@@ -322,13 +322,34 @@ server <- function(input, output, session) {
       height=length(levels(deployments$placename))*20)
   })
 
+  
+  # Independent data creation  ---------------------------------------------------
+  
+  
   # Update the count dropdown dynamically based on available numeric inputs
   observe({
-    updateSelectInput(session, "ind_count", choices = names(data_store$dfs[["images.csv"]])[sapply(data_store$dfs[["images.csv"]], function(col) is.numeric(col) && all(col == floor(col)))])
+    # Get all integer columns
+    integer_cols <- names(data_store$dfs[["images.csv"]])[
+      sapply(data_store$dfs[["images.csv"]], function(col) is.numeric(col) && all(col == floor(col)))
+    ]
+    
+    # Exclude specific columns
+    integer_cols <- setdiff(integer_cols, c("project_id", "is_blank"))
+    
+    # Set default selection
+    default_selection <- if("number_of_objects" %in% integer_cols) {
+      "number_of_objects"
+    } else if(length(integer_cols) > 0) {
+      integer_cols[1]
+    } else {
+      NULL
+    }
+    
+    updateSelectInput(session, "ind_count", 
+                      choices = integer_cols,
+                      selected = default_selection)
   })
   
-
-  # Independent data creation  ---------------------------------------------------
 
   # Create waiter instance (for showing users that something is happening when they click on the button)
   w <- Waiter$new(id = "ind_run", html = spin_ellipsis(), color = "grey20")
@@ -357,7 +378,7 @@ server <- function(input, output, session) {
       
       req(length(results) > 0)  # Ensure data exists
       
-      selectInput("analysis_choice", "Select a File to Preview",
+      selectInput("analysis_choice", "Select an analysis file to preview:",
                   choices = names(results),
                   selected = names(results)[1])
       
@@ -370,9 +391,54 @@ server <- function(input, output, session) {
       
       DT::datatable(results[[input$analysis_choice]],
                     options = list(scrollX = TRUE))
-    
-
   })
+  
+    output$results_box <- renderUI({
+      req(results)  # Only render when results exists
+      
+      box(
+        title = "Independent data",
+        width = 12,
+        downloadButton("download_results", "Download All Datasets (.zip)"),
+        p(),
+        uiOutput("selected_analysis_file"),
+        DTOutput("custom_analysis_data_preview")
+        
+      )
+    })
+  
+    
+    # Download a zipfile of the formatted data
+    output$download_results <- downloadHandler(
+      filename = function() {
+        paste0("ind_data_",  input$ind_thresh,"_mins_", format(Sys.Date(), "%Y%m%d"), ".zip")
+      },
+      content = function(file) {
+        req(results)
+        
+        # Create a temporary directory
+        temp_dir <- tempfile()
+        dir.create(temp_dir)
+        
+        # Write each dataframe as a CSV file
+        for (i in seq_along(results)) {
+          csv_name <- paste0(names(results)[i], ".csv")
+          csv_path <- file.path(temp_dir, csv_name)
+          write.csv(results[[i]], csv_path, row.names = FALSE)
+        }
+        
+        # Get list of files to zip
+        csv_files <- list.files(temp_dir, full.names = TRUE)
+        
+        # Create the zip file
+        zip::zip(zipfile = file, 
+                 files = basename(csv_files),
+                 root = temp_dir)
+      },
+      contentType = "application/zip"
+    )
+    
+    
 
 ######################      
 # detection summaries -----------------------------------------------------------    

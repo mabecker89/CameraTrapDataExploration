@@ -18,6 +18,7 @@ library(rlang)
 library(viridis)
 library(patchwork)
 library(corrplot)
+library(zip)
 
 # Set max file size to 25 MB
 options(shiny.maxRequestSize = 100 * 1024^2)
