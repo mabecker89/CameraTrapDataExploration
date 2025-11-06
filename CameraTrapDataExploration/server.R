@@ -621,7 +621,7 @@ server <- function(input, output, session) {
                                choices = species_choices,
                                selected = species_choices[1])
             ),
-            column(8, plotOutput("species_trends_plot"))
+            column(8, plotlyOutput("species_trends_plot")) 
           )
         )
       }
@@ -675,8 +675,7 @@ server <- function(input, output, session) {
     })
 
     # Interactive Plot: Capture Rates for Selected Species
-    output$species_trends_plot <- renderPlot({
-
+    output$species_trends_plot <- renderPlotly({  # Changed from renderPlot
       req(input$selected_species)  # Ensure a species is selected
       
       # Pull in the right data
@@ -700,7 +699,7 @@ server <- function(input, output, session) {
       # Wide to long
       long_df <- mon_summary %>%
         pivot_longer(
-          cols = sp_summary$sp,  # All species coilumns will be gathered
+          cols = sp_summary$sp,  # All species columns will be gathered
           names_to = "sp",  # New column for species names
           values_to = "Count"  # New column for counts
         ) %>%
@@ -708,13 +707,17 @@ server <- function(input, output, session) {
       
       filtered_data <- long_df %>%
         filter(sp == input$selected_species)
-
-      ggplot(filtered_data, aes(x = date, y = CaptureRate)) +
+      
+      # Create ggplot object
+      p <- ggplot(filtered_data, aes(x = date, y = CaptureRate)) +
         geom_line(color = "darkgreen", size = 1) +
-        labs(title = paste("Capture Rates of", input$selected_species),
+        labs(title = paste("Capture Rate of", input$selected_species),
              x = "Date", y = "Capture Rate per 100 days") +
         ylim(0, NA) + 
         theme_minimal()
+      
+      # Convert to plotly
+      ggplotly(p)
     })
 
 
@@ -780,7 +783,8 @@ server <- function(input, output, session) {
           stroke = FALSE,
           fillOpacity = 0.6,
           popup = ~paste(placename, "- Capture Rate:", round(CaptureRate, 2))
-        )
+        ) 
+        
     })
     
 
