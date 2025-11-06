@@ -10,7 +10,9 @@
 #' @param count_column Desired count column
 #' 
 
-create_ind_detect <- function(deployments, images, threshold, count_column) {
+create_ind_detect <- function(deployments, images, threshold, count_column, 
+                              include_classes = c("Mammalia"), 
+                              include_humans = FALSE) {
   
   # Should we do this here instead?
   #images$sp <- paste0(images$genus, ".", images$species)
@@ -20,12 +22,20 @@ create_ind_detect <- function(deployments, images, threshold, count_column) {
   #deployments$days <- interval(deployments$start_date, deployments$end_date)/ddays(1)
   #images <- left_join(images, deployments[,c("deployment_id", "placename")])
   
-  # Remove observations without animals detected, where we don't know the species, and non-mammals
-  images <- images |> 
-    filter(is_blank==0,                # Remove the blanks
-           !species == "",             # Remove classifications which don't have species 
-           class=="Mammalia",          # Subset to mammals
-           species!="sapiens")         # Subset to anything that isn't human
+  # Build the filter
+  images_filtered <- images |> 
+    filter(is_blank == 0,           # Remove the blanks
+           !species == "",          # Remove classifications which don't have species
+           class %in% include_classes)  # Filter by selected classes
+  
+  # Conditionally filter out humans
+  if (!include_humans) {
+    images_filtered <- images_filtered |>
+      filter(species != "sapiens")
+  }
+  
+  # Use images_filtered instead of images for the rest of the function
+  images <- images_filtered
   
   # Create list object to store all the dataframes we are creating
   results <- list()

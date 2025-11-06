@@ -21,7 +21,7 @@ sidebar <- dashboardSidebar(
     menuItem("Independent Detections", tabName = "ind_detect", icon=icon("fa-solid fa-computer")),
     # Analysis data exploration
     menuItem("Analysis Data Exploration", icon = icon("wpexplorer"),
-             menuSubItem("Capture summaries", tabName = "capture"),
+             menuSubItem("Detection summaries", tabName = "capture"),
              menuSubItem("Temporal Patterns", tabName = "temporal"),
              menuSubItem("Spatial Patterns", tabName = "spatial_capture")
     #         menuSubItem("Covariate Plots", tabName = "covariate")
@@ -181,12 +181,26 @@ ui_map <- fluidRow(
 # Independent data creation ----------------------------------------------------------------------------------------------------------
 
 ui_ind_detect <- fluidRow(
-
+  
   # Map of camera locations
   column(
     h2("Independent data creation"), width = 12, style = "font-size: 130%",
-
+    
     "This page creates and stores your independent data.",
+    p(),
+    
+    # Taxonomic filters
+    h3("Select which groups to include:"),
+    checkboxGroupInput("taxa_include", 
+                       label = NULL,
+                       choices = c("Mammals" = "Mammalia",
+                                   "Birds" = "Aves",
+                                   "Reptiles" = "Reptilia",
+                                   "Amphibians" = "Amphibia"),
+                       selected = c("Mammalia")),  # Mammals selected by default
+    
+    checkboxInput("include_humans", "Include humans (Homo sapiens)", value = FALSE),
+    
     p(),
     "You first need to specify your inderpendance interval in decimal minutes (minimum = 0.01, max = 1000).",
     p(),
@@ -212,13 +226,10 @@ ui_ind_detect <- fluidRow(
     uiOutput("selected_analysis_file"),
     
     uiOutput("results_box")
-    
-    
-    )
-
+  )
 )
 
-# Capture summaries ----------------------------------------------------------------------------------------------------------
+# Detection summaries ----------------------------------------------------------------------------------------------------------
 
 ui_capture <- fluidRow(
   
@@ -245,42 +256,46 @@ ui_capture <- fluidRow(
 
 ui_temporal <- fluidRow(
   
-  column(12, titlePanel("Temporal trends")),  # Full-width title
-  "The following plot shows you how many cameras you have active each month (top panel) and the total monthly capture rate (irrespective of species) on the bottom panel.",
-  p(),
-  
-  conditionalPanel(
-    condition = "output.button_clicked == false",
-    box(
-      width = 12,
-      h4("Independent detections not yet created.", style = "color: #777; text-align: center; padding: 20px;")
-    )
-  ),
-  
-  uiOutput("temporal_plots_output")
+  column(
+    width = 12,
+    titlePanel("Temporal trends"),
+    "The following plot shows you how many cameras you have active each month (top panel) and the total monthly capture rate (irrespective of species) on the bottom panel.",
+    p(),
+    
+    conditionalPanel(
+      condition = "output.button_clicked == false",
+      box(
+        width = 12,
+        h4("Independent detections not yet created.", style = "color: #777; text-align: center; padding: 20px;")
+      )
+    ),
+    
+    uiOutput("temporal_plots_output")
+  )
 )
-
 
 
 # Spatial maps of captures  ----------------------------------------------------------------------------------------------------------
 
 ui_spatial_caps <- fluidRow(
   
-  column(12, titlePanel("Species Capture Rate Map")),
-  "The following plot allows you to see where you accrued detections for each of your species classifications. Select from the drop down menu to vary the species.",
-  p(),
-  
-  conditionalPanel(
-    condition = "output.button_clicked == false",
-    box(
-      width = 12,
-      h4("Independent detections not yet created.", style = "color: #777; text-align: center; padding: 20px;")
-    )
-  ),
-  
-  uiOutput("spatial_plots_output")
+  column(
+    width = 12,
+    titlePanel("Species Capture Rate Map"),
+    "The following plot allows you to see where you accrued detections for each of your species classifications. Select from the drop down menu to vary the species.",
+    p(),
+    
+    conditionalPanel(
+      condition = "output.button_clicked == false",
+      box(
+        width = 12,
+        h4("Independent detections not yet created.", style = "color: #777; text-align: center; padding: 20px;")
+      )
+    ),
+    
+    uiOutput("spatial_plots_output")
+  )
 )
-
 
 
 

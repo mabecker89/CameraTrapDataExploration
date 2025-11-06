@@ -382,8 +382,10 @@ server <- function(input, output, session) {
     results <- create_ind_detect(deployments = data_store$dfs[["deployments.csv"]],
                                  images = data_store$dfs[["images.csv"]],
                                  threshold = input$ind_thresh,
-                                 count_column = input$ind_count)
-   
+                                 count_column = input$ind_count,
+                                 include_classes = input$taxa_include,  # Add this
+                                 include_humans = input$include_humans)  # Add this
+    
     # Store results in reactive value so they are accessible later!
     results_store$data <- results
     
@@ -464,24 +466,87 @@ server <- function(input, output, session) {
 # detection summaries -----------------------------------------------------------    
     
     
+    # Create summary statistics output
+    output$summary_stats <- renderUI({
+      req(results_ready())
+      
+      # Calculate statistics
+      total_stations <- nrow(results_store$data[["camera_locations"]])
+      total_survey_nights <- sum(results_store$data[["independent_total_observations"]]$days)
+      total_species <- nrow(results_store$data[["species_list"]])
+      total_detections <- sum(results_store$data[["independent_total_observations"]][, results_store$data[["species_list"]]$sp])
+      
+      # Calculate nights per camera
+      avg_nights <- mean(results_store$data[["independent_total_observations"]]$days)
+      min_nights <- min(results_store$data[["independent_total_observations"]]$days)
+      max_nights <- max(results_store$data[["independent_total_observations"]]$days)
+      
+      # Calculate date range
+      mon_obs <- results_store$data[["independent_monthly_observations"]]
+      date_range <- paste(format(min(ym(mon_obs$date)), "%b %Y"), "to", format(max(ym(mon_obs$date)), "%b %Y"))
+      
+      fluidRow(
+        column(12,
+               box(
+                 title = "Survey Summary Statistics",
+                 width = NULL,
+                 column(3, 
+                        tags$div(style = "text-align: center;",
+                                 h3(total_stations, style = "color: #3c8dbc; margin: 5px;"),
+                                 p("Unique Stations")
+                        )
+                 ),
+                 column(3,
+                        tags$div(style = "text-align: center;",
+                                 h3(round(total_survey_nights, 0), style = "color: #3c8dbc; margin: 5px;"),
+                                 p("Survey Nights")
+                        )
+                 ),
+                 column(3,
+                        tags$div(style = "text-align: center;",
+                                 h3(total_species, style = "color: #3c8dbc; margin: 5px;"),
+                                 p("Species Detected")
+                        )
+                 ),
+                 column(3,
+                        tags$div(style = "text-align: center;",
+                                 h3(total_detections, style = "color: #3c8dbc; margin: 5px;"),
+                                 p("Total Independent Detections")
+                        )
+                 ),
+                 column(6,
+                        tags$div(style = "text-align: center; margin-top: 10px;",
+                                 p(strong("Avg Nights per Station: "), round(avg_nights, 1), 
+                                   " (min: ", round(min_nights, 1), ", max: ", round(max_nights, 1), ")")
+                        )
+                 ),
+                 column(6,
+                        tags$div(style = "text-align: center; margin-top: 10px;",
+                                 p(strong("Survey Period: "), date_range)
+                        )
+                 )
+               )
+        )
+      )
+    })
+    
     # Set up the error message if the independent data doesnt exist
     output$capture_summary_output <- renderUI({
       if (!results_ready()) {
-        # Show message when results don't exist but button was clicked
         box(
           width = 12,
           h4("Independent data not yet created", style = "color: #777; text-align: center; padding: 20px;")
         )
       } else {
-        # Show the plot when results exist
-        plotlyOutput(outputId = "capture_summary", height = "auto")
+        tagList(
+          uiOutput("summary_stats"),
+          plotlyOutput(outputId = "capture_summary", height = "auto")
+        )
       }
     })
     
-    
     # Create the plotly plot
     output$capture_summary <- renderPlotly({
-      
       req(results_ready())
       
       # Call the saved data
@@ -489,62 +554,44 @@ server <- function(input, output, session) {
       images <- data_store$dfs[["images.csv"]]
       
       long_obs <- results_store$data[["independent_total_observations"]] %>% 
-        pivot_longer(cols=results_store$data[["species_list"]]$sp,  # The columns we want to create into rows - species
-                     names_to="sp",       # What we what the number column to be called
-                     values_to = "count") # Takes the values in the species columns and calls them `count`
+        pivot_longer(cols=results_store$data[["species_list"]]$sp,
+                     names_to="sp",
+                     values_to = "count")
       
+      tmp <- long_obs %>%
+        group_by(sp) %>%
+        summarise(count=sum(count))
       
-      # We can them summaries those using dplyr
-      tmp <- long_obs %>%                   # Take the long observation data frame `long_obs` 
-        group_by(sp) %>%            # Group by species
-        summarise(count=sum(count)) # Sum all the independent observations
-      
-      # Add it to the sp_summary dataframe
       sp_summary <- left_join(results_store$data[["species_list"]], tmp)
       
-      # Calculate raw occupancy
-      # We use the mutate function to mutate the column
-      total_binary <-   results_store$data[["independent_total_observations"]] %>%    # The total obs dataframe              
-        mutate(across(results_store$data[["species_list"]]$sp, ~+as.logical(.x)))  # across all of the species columns, make it binary
+      total_binary <- results_store$data[["independent_total_observations"]] %>%
+        mutate(across(results_store$data[["species_list"]]$sp, ~+as.logical(.x)))
       
-      # Flip the dataframe to longer - as before
       long_bin <- total_binary %>% 
-        pivot_longer(cols=results_store$data[["species_list"]]$sp, names_to="sp", values_to = "count") # Takes the species names columns, and makes them unique rows with "sp" as the key 
+        pivot_longer(cols=results_store$data[["species_list"]]$sp, names_to="sp", values_to = "count")
       
-      # We can now sum the presence/absences and divide by the number of survey locations
       tmp <- long_bin %>% 
         group_by(sp) %>% 
-        summarise(occupancy=sum(count)/nrow(results_store$data[["camera_locations"]])) # divided the sum by the number of sites
+        summarise(occupancy=sum(count)/nrow(results_store$data[["camera_locations"]]))
       
-      # add the results to the sp_summary
       sp_summary <- left_join(sp_summary, tmp)
-      
-      # Order the summaries to something sensible
       sp_summary <- sp_summary[order(sp_summary$count),]
       
-      yform <- list(categoryorder = "array",
-                    categoryarray = sp_summary$sp)
+      yform <- list(categoryorder = "array", categoryarray = sp_summary$sp)
+      xform <- list(title="Independent detections")
       
-      xform <- list(title="Captures")
-      
-      # Capture rate
       fig1 <- plot_ly(x = sp_summary$count, y = sp_summary$sp, type = 'bar', orientation = 'h', name="count") %>% 
-        layout(yaxis = yform, xaxis=xform, height=nrow(sp_summary)*20) # Try to control the height
+        layout(yaxis = yform, xaxis=xform, height=nrow(sp_summary)*20)
       
-      yform <- list(categoryorder = "array",
-                    categoryarray = sp_summary$sp,
-                    showticklabels=F)
-      xform <- list(title="Occupancy")
+      yform <- list(categoryorder = "array", categoryarray = sp_summary$sp, showticklabels=F)
+      xform <- list(title="Naive occupancy")
       
-      
-      # Occupancy
       fig2 <- plot_ly(x = sp_summary$occupancy, y = sp_summary$sp, type = 'bar', orientation = 'h', name="occupancy") %>% 
         layout(yaxis = yform, xaxis=xform)
       
-      subplot(nrows=1,fig1, fig2, titleX = T)
-      
-    })  
-    
+      subplot(nrows=1, fig1, fig2, titleX = T) %>%
+        layout(height = max(400, nrow(sp_summary) * 20))
+    }) 
     
   
 
@@ -656,17 +703,16 @@ server <- function(input, output, session) {
           cols = sp_summary$sp,  # All species coilumns will be gathered
           names_to = "sp",  # New column for species names
           values_to = "Count"  # New column for counts
-        )
-      
-      
+        ) %>%
+        mutate(CaptureRate = Count / (cam_days / 100))  # Calculate capture rate per 100 days
       
       filtered_data <- long_df %>%
         filter(sp == input$selected_species)
 
-      ggplot(filtered_data, aes(x = date, y = Count)) +
+      ggplot(filtered_data, aes(x = date, y = CaptureRate)) +
         geom_line(color = "darkgreen", size = 1) +
         labs(title = paste("Capture Rates of", input$selected_species),
-             x = "Date", y = "Captures") +
+             x = "Date", y = "Capture Rate per 100 days") +
         ylim(0, NA) + 
         theme_minimal()
     })
