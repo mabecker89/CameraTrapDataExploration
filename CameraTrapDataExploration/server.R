@@ -323,7 +323,10 @@ server <- function(input, output, session) {
       ticktext = as.list(levels(deployments$placename)), 
       tickvals = as.list(1:length(levels(deployments$placename))),
       tickmode = "array"),
-      height=length(levels(deployments$placename))*20)
+      height=length(levels(deployments$placename))*20) %>%
+      config(displayModeBar = TRUE,
+             modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
+    
   })
 
   
@@ -581,13 +584,18 @@ server <- function(input, output, session) {
       xform <- list(title="Independent detections")
       
       fig1 <- plot_ly(x = sp_summary$count, y = sp_summary$sp, type = 'bar', orientation = 'h', name="count") %>% 
-        layout(yaxis = yform, xaxis=xform, height=nrow(sp_summary)*20)
+        layout(yaxis = yform, xaxis=xform, height=nrow(sp_summary)*20)  %>%
+        config(displayModeBar = TRUE,
+               modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
       
       yform <- list(categoryorder = "array", categoryarray = sp_summary$sp, showticklabels=F)
       xform <- list(title="Naive occupancy")
       
       fig2 <- plot_ly(x = sp_summary$occupancy, y = sp_summary$sp, type = 'bar', orientation = 'h', name="occupancy") %>% 
-        layout(yaxis = yform, xaxis=xform)
+        layout(yaxis = yform, xaxis=xform) %>%
+        config(displayModeBar = TRUE,
+               modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
+      
       
       subplot(nrows=1, fig1, fig2, titleX = T) %>%
         layout(height = max(400, nrow(sp_summary) * 20))
@@ -657,7 +665,10 @@ server <- function(input, output, session) {
                    line = list(color = "blue"), name = "Active Cameras") %>%
       layout(title = "Active Cameras Over Time",
              xaxis = list(title = "Date"),
-             yaxis = list(title = "Active Cameras", rangemode = "tozero"))  # Ensure y-axis starts at 0
+             yaxis = list(title = "Active Cameras", rangemode = "tozero")) %>%
+      config(displayModeBar = TRUE,
+             modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
+
     
     
     mon_summary$all.sp <- rowSums(mon_summary[, sp_summary$sp])
@@ -667,7 +678,9 @@ server <- function(input, output, session) {
                   line = list(color = "darkred"), name = "Capture Rate per 100 days") %>%
       layout(title = "Overall Capture Rates (All Species)",
              xaxis = list(title = "Date"),
-             yaxis = list(title = "Capture Rate per 100 days", rangemode = "tozero"))  # Ensure y-axis starts at 0
+             yaxis = list(title = "Capture Rate per 100 days", rangemode = "tozero")) %>%
+      config(displayModeBar = TRUE,
+             modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
     
     # Combine plots vertically using subplot()
     subplot(p1, p2, nrows = 2, shareX = TRUE, titleY = TRUE) %>% layout(height = 700)
@@ -717,7 +730,10 @@ server <- function(input, output, session) {
         theme_minimal()
       
       # Convert to plotly
-      ggplotly(p)
+      ggplotly(p) %>%
+        config(displayModeBar = TRUE,
+               modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
+      
     })
 
 
@@ -745,7 +761,10 @@ server <- function(input, output, session) {
                                selected = species_choices[1]))
           ),
           fluidRow(
-            column(12, leafletOutput("capture_map"))
+            column(12, downloadButton("download_map_png", "Download Map as PNG", icon = icon("camera"))
+,
+p(),
+leafletOutput("capture_map"))
           ),
           hr(),
           fluidRow(
@@ -773,6 +792,27 @@ server <- function(input, output, session) {
       
       focal_cr <- total_obs %>% mutate(CaptureRate = total_obs[[input$selected_species_map]] / (days / 100))
       
+      # Calculate min and max for legend
+      max_cr <- max(focal_cr$CaptureRate, na.rm = TRUE)
+      min_cr <- min(focal_cr$CaptureRate, na.rm = TRUE)
+      mid_cr <- min_cr + ((max_cr - min_cr)/2)
+      
+      # Create custom HTML legend
+      legend_html <- paste0(
+        '<div style="padding: 10px; background: white; border: 2px solid grey; border-radius: 5px;">',
+        '<strong>', input$selected_species_map, '</strong><br>',
+        '<strong>Capture Rate</strong><br>(per 100 days)<br><br>',
+        '<svg width="120" height="80">',
+        '<circle cx="15" cy="15" r="11" fill="rgba(0, 102, 204, 0.6)" />',
+        '<text x="35" y="20" font-size="12">High: ', round(max_cr, 2), '</text>',
+        '<circle cx="15" cy="40" r="7" fill="rgba(0, 102, 204, 0.6)" />',
+        '<text x="35" y="45" font-size="12">Med: ', round(mid_cr, 2), '</text>',
+        '<circle cx="15" cy="65" r="3" fill="rgba(0, 102, 204, 0.6)" />',
+        '<text x="35" y="70" font-size="12">Low: ', round(min_cr, 2), '</text>',
+        '</svg>',
+        '</div>'
+      )
+      
       leaflet() %>%
         addProviderTiles(providers$Esri.WorldTopoMap) %>%
         addCircleMarkers(
@@ -783,9 +823,66 @@ server <- function(input, output, session) {
           stroke = FALSE,
           fillOpacity = 0.6,
           popup = ~paste(placename, "- Capture Rate:", round(CaptureRate, 2))
-        ) 
+        ) %>%   
+        addScaleBar(position = "topleft") %>%
+        addControl(html = legend_html, position = "bottomright")
         
     })
+    
+    # Download map button 
+    output$download_map_png <- downloadHandler(
+      filename = function() {
+        paste0("map_", input$selected_species_map, "_", Sys.Date(), ".png")
+      },
+      content = function(file) {
+        req(input$selected_species_map)
+        
+        wide_obs <- results_store$data[["independent_total_observations"]] 
+        locs <- results_store$data[["camera_locations"]]
+        total_obs <- left_join(wide_obs, locs)
+        focal_cr <- total_obs %>% mutate(CaptureRate = total_obs[[input$selected_species_map]] / (days / 100))
+        
+        # Calculate min and max for legend
+        max_cr <- max(focal_cr$CaptureRate, na.rm = TRUE)
+        min_cr <- min(focal_cr$CaptureRate, na.rm = TRUE)
+        mid_cr <- min_cr + ((max_cr - min_cr)/2)
+        
+        # Create custom HTML legend
+        legend_html <- paste0(
+          '<div style="padding: 10px; background: white; border: 2px solid grey; border-radius: 5px;">',
+          '<strong>', input$selected_species_map, '</strong><br>',
+          '<strong>Capture Rate</strong><br>(per 100 days)<br><br>',
+          '<svg width="120" height="80">',
+          '<circle cx="15" cy="15" r="11" fill="rgba(0, 102, 204, 0.6)" />',
+          '<text x="35" y="20" font-size="12">High: ', round(max_cr, 2), '</text>',
+          '<circle cx="15" cy="40" r="7" fill="rgba(0, 102, 204, 0.6)" />',
+          '<text x="35" y="45" font-size="12">Med: ', round(mid_cr, 2), '</text>',
+          '<circle cx="15" cy="65" r="3" fill="rgba(0, 102, 204, 0.6)" />',
+          '<text x="35" y="70" font-size="12">Low: ', round(min_cr, 2), '</text>',
+          '</svg>',
+          '</div>'
+        )
+        
+        m <- leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
+          addProviderTiles(providers$Esri.WorldTopoMap) %>%
+          addCircleMarkers(
+            data = focal_cr,
+            lng = ~longitude,
+            lat = ~latitude,
+            radius = ~(CaptureRate / max(CaptureRate, na.rm = TRUE) * 10) + 1,
+            stroke = FALSE,
+            fillOpacity = 0.6
+          ) %>%  addScaleBar(position = "topleft") %>%
+          addControl(html = legend_html, position = "bottomright")
+        
+        # Save to temp html first
+        temp_html <- tempfile(fileext = ".html")
+        htmlwidgets::saveWidget(m, temp_html, selfcontained = TRUE)
+        
+        # Convert to PNG using webshot2
+        webshot2::webshot(temp_html, file = file, vwidth = 1200, vheight = 800)
+      }
+    )
     
 
 #################

@@ -19,8 +19,10 @@ library(viridis)
 library(patchwork)
 library(corrplot)
 library(zip)
+library(mapview)
+library(webshot2)
 
-# Set max file size to 25 MB
+  # Set max file size to 25 MB
 options(shiny.maxRequestSize = 100 * 1024^2)
 
 # Source functions
