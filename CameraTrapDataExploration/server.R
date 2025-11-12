@@ -484,9 +484,9 @@ server <- function(input, output, session) {
       min_nights <- min(results_store$data[["independent_total_observations"]]$days)
       max_nights <- max(results_store$data[["independent_total_observations"]]$days)
       
-      # Calculate date range
-      mon_obs <- results_store$data[["independent_monthly_observations"]]
-      date_range <- paste(format(min(ym(mon_obs$date)), "%b %Y"), "to", format(max(ym(mon_obs$date)), "%b %Y"))
+      # Calculate date range - use row_lookup instead
+      row_lookup <- results_store$data[["row_lookup"]]
+      date_range <- paste(format(min(row_lookup$date), "%b %Y"), "to", format(max(row_lookup$date), "%b %Y"))
       
       fluidRow(
         column(12,
@@ -502,7 +502,7 @@ server <- function(input, output, session) {
                  column(3,
                         tags$div(style = "text-align: center;",
                                  h3(round(total_survey_nights, 0), style = "color: #3c8dbc; margin: 5px;"),
-                                 p("Survey Nights")
+                                 p("Camera trap days")
                         )
                  ),
                  column(3,
@@ -519,7 +519,7 @@ server <- function(input, output, session) {
                  ),
                  column(6,
                         tags$div(style = "text-align: center; margin-top: 10px;",
-                                 p(strong("Avg Nights per Station: "), round(avg_nights, 1), 
+                                 p(strong("Avg Days per Station: "), round(avg_nights, 1), 
                                    " (min: ", round(min_nights, 1), ", max: ", round(max_nights, 1), ")")
                         )
                  ),
@@ -647,16 +647,16 @@ server <- function(input, output, session) {
     mon_obs <- results_store$data[["independent_monthly_observations"]]
     sp_summary <- results_store$data[["species_list"]]
     
-    mon_summary <- mon_obs %>%        # Use the monthly observations dataframe
-      group_by(date) %>%              # Group by the date
-      summarise(locs_active=n(),      # Count the number of active cameras
-                cam_days=sum(days))   # And sum the active days
-
-    mon_summary <- mon_obs %>% 
+    mon_summary <- mon_obs %>%        
+      group_by(date) %>%              
+      summarise(locs_active=n(),      
+                cam_days=sum(days))   
+    
+    mon_summary_species <- mon_obs %>% 
       group_by(date) %>%  
-      summarise(across(sp_summary$sp, sum, na.rm=TRUE)) %>% # summarise across all of 
-      # the species columns 
-      left_join(x=mon_summary) 
+      summarise(across(sp_summary$sp, sum, na.rm=TRUE))
+    
+    mon_summary <- left_join(mon_summary, mon_summary_species, by = "date")  # Proper join
     
      # Update date format
       mon_summary$date <- ym(mon_summary$date)

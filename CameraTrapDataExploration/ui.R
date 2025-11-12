@@ -217,7 +217,7 @@ ui_ind_detect <- fluidRow(
     p(),
     HTML("<b>Click the green button below to create your independent data:</b>"),
     p(),
-    HTML("<i>25,000 images took 12 seconds in testing. </i>"),
+    HTML("<i> This code should run quickly. 2 million images across 350 stations took 20 seconds in testing. </i>"),
     p(),
     actionButton("ind_run", "Generate independent detections", class = "btn-lg btn-success"),
     p(),

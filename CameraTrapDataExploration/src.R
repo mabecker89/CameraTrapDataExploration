@@ -180,22 +180,24 @@ create_ind_detect <- function(deployments, images, threshold, count_column,
     )
   
   mon_obs <- mon_obs_base |>
+    rename(date = month) |>  # Rename first
     left_join(
       ind_by_mon |>
         select(placename, month, sp, obs) |>
         tidyr::pivot_wider(names_from = sp, values_from = obs, values_fill = 0),
-      by = c("placename", "month")
+      by = c("placename", "date" = "month")
     )
   sp_cols <- intersect(sp_levels, names(mon_obs))
   mon_obs <- mon_obs |>
     mutate(across(all_of(sp_cols), ~ tidyr::replace_na(.x, 0)))
   
   mon_count <- mon_obs_base |>
+    rename(date = month) |>  # Rename first
     left_join(
       ind_by_mon |>
         select(placename, month, sp, count) |>
         tidyr::pivot_wider(names_from = sp, values_from = count, values_fill = 0),
-      by = c("placename", "month")
+      by = c("placename", "date" = "month")
     )
   sp_cols <- intersect(sp_levels, names(mon_count))
   mon_count <- mon_count |>
@@ -224,25 +226,27 @@ create_ind_detect <- function(deployments, images, threshold, count_column,
     )
   
   week_obs <- week_obs_base |>
+    rename(date = week) |>  # Rename BEFORE relocate
     left_join(
       ind_by_week |>
         select(placename, week, sp, obs) |>
         tidyr::pivot_wider(names_from = sp, values_from = obs, values_fill = 0),
-      by = c("placename", "week")
+      by = c("placename", "date" = "week")
     ) |>
-    relocate(start_date, end_date, .after = week)
+    relocate(start_date, end_date, .after = date)  # Now this works
   sp_cols <- intersect(sp_levels, names(week_obs))
   week_obs <- week_obs |>
     mutate(across(all_of(sp_cols), ~ tidyr::replace_na(.x, 0)))
   
   week_count <- week_obs_base |>
+    rename(date = week) |>  # Rename BEFORE relocate
     left_join(
       ind_by_week |>
         select(placename, week, sp, count) |>
         tidyr::pivot_wider(names_from = sp, values_from = count, values_fill = 0),
-      by = c("placename", "week")
+      by = c("placename", "date" = "week")
     ) |>
-    relocate(start_date, end_date, .after = week)
+    relocate(start_date, end_date, .after = date)  # Now this works
   sp_cols <- intersect(sp_levels, names(week_count))
   week_count <- week_count |>
     mutate(across(all_of(sp_cols), ~ tidyr::replace_na(.x, 0)))
@@ -271,7 +275,7 @@ create_ind_detect <- function(deployments, images, threshold, count_column,
         select(placename, day, sp, obs) |>
         tidyr::pivot_wider(names_from = sp, values_from = obs, values_fill = 0),
       by = c("placename" = "placename", "date" = "day")
-    )
+    ) 
   
   # Ensure all species columns exist and are 0-filled
   missing_cols <- setdiff(sp_levels, names(day_obs))
