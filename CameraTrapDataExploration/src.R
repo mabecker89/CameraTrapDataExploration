@@ -108,7 +108,7 @@ create_ind_detect <- function(deployments, images, threshold, count_column,
   
   # Camera locations 
   cam_locs <- deployments |>
-    distinct(project_id, placename, longitude, latitude, feature_type)
+    distinct(project_id, placename, longitude, latitude) #, feature_type) # I have removed feature type as sometimes typos create new stations 
   results[["camera_locations"]] <- cam_locs
   
   # Species list (ordered, sp dotted) 

@@ -2,7 +2,7 @@
 #
 
 server <- function(input, output, session) {
- 
+  
   
   # Upload Data ----------------------------------------------------------------------------------------------------------
   
@@ -57,51 +57,49 @@ server <- function(input, output, session) {
     }
     
     # Merge all of the image files included into a single csv
-    # split out the image files
-    images_data <- lapply(names(dfs)[grepl("^images", names(dfs))], function(name) dfs[[name]])
+    # BUT ONLY for Wildlife Insights (which has multiple images_*.csv files)
+    images_data <- lapply(names(dfs)[grepl("^images_[0-9]", names(dfs))], function(name) dfs[[name]])
     
     if (length(images_data) > 0) {
-      dfs[["images.csv"]] <- bind_rows(images_data)
-      # Remove the un merged files
-      dfs <- dfs[!grepl("^images_", names(dfs))]
+      # Only merge if images.csv doesn't already exist (Wildlife Insights format)
+      if (!"images.csv" %in% names(dfs)) {
+        dfs[["images.csv"]] <- bind_rows(images_data)
+      }
+      # Remove the numbered files (images_1.csv, images_2.csv, etc.)
+      dfs <- dfs[!grepl("^images_[0-9]", names(dfs))]
     }
     
-    # HOUSEKEEPING
-    # Format appropriate dates and create a species column
-    if (length(dfs) > 0) {
+    # HOUSEKEEPING - process based on which files are present
+    
+    # Wildlife Insights format - check for images.csv AND deployments.csv (but NOT WildCo files)
+    if (all(c("images.csv", "deployments.csv") %in% names(dfs)) &&
+        !all(c("stations.csv", "tags.csv") %in% names(dfs)) &&
+        !any(str_detect(names(dfs), "main_report.csv$"))) {
       
-      if ("images.csv" %in% names(dfs)) {
-        dfs[["images.csv"]]$sp <- paste0(dfs[["images.csv"]]$genus, ".", dfs[["images.csv"]]$species)
-        dfs[["images.csv"]]$timestamp <- ymd_hms(dfs[["images.csv"]]$timestamp)
-      }
+      # Format appropriate dates and create a species column
+      dfs[["images.csv"]]$sp <- paste0(dfs[["images.csv"]]$genus, ".", dfs[["images.csv"]]$species)
+      dfs[["images.csv"]]$timestamp <- ymd_hms(dfs[["images.csv"]]$timestamp)
       
-      if ("deployments.csv" %in% names(dfs)) {
-        dfs[["deployments.csv"]]$start_date <- ymd(dfs[["deployments.csv"]]$start_date)
-        dfs[["deployments.csv"]]$end_date <- ymd(dfs[["deployments.csv"]]$end_date)
-        dfs[["deployments.csv"]]$days <- interval(
-          dfs[["deployments.csv"]]$start_date,
-          dfs[["deployments.csv"]]$end_date
-        ) / ddays(1)
-      }
+      dfs[["deployments.csv"]]$start_date <- ymd(dfs[["deployments.csv"]]$start_date)
+      dfs[["deployments.csv"]]$end_date <- ymd(dfs[["deployments.csv"]]$end_date)
+      dfs[["deployments.csv"]]$days <- interval(
+        dfs[["deployments.csv"]]$start_date,
+        dfs[["deployments.csv"]]$end_date
+      ) / ddays(1)
       
-      # Only join if both exist
-      if (all(c("images.csv", "deployments.csv") %in% names(dfs))) {
-        dfs[["images.csv"]] <- left_join(
-          dfs[["images.csv"]],
-          dfs[["deployments.csv"]][, c("deployment_id", "placename")],
-          by = "deployment_id"
-        )
-      }
+      # Join deployment info to images
+      dfs[["images.csv"]] <- left_join(
+        dfs[["images.csv"]],
+        dfs[["deployments.csv"]][, c("deployment_id", "placename")],
+        by = "deployment_id"
+      )
     }
     
-    # WildTrax main reports
-    
+    # WildTrax format - check for main_report.csv
     if (any(str_detect(names(dfs), "main_report.csv$"))) {
       
       # Find name that ends in "main_report.csv"
       idx <- grep("main_report.csv$", names(dfs))
-      
-      # Rename that element to main_report.csv
       names(dfs)[idx] <- "main_report.csv"
       
       # Create deployments.csv
@@ -109,7 +107,7 @@ server <- function(input, output, session) {
         group_by(project_id, location, latitude, longitude) |>
         summarise(start_date = min(as.Date(image_date_time)),
                   end_date = max(as.Date(image_date_time))) |>
-        mutate(deployment_id = paste0(location),   #, "_", start_date),
+        mutate(deployment_id = paste0(location),
                feature_type = "") |>
         select(project_id, deployment_id, placename = location, longitude, latitude, start_date, end_date, feature_type) |>
         ungroup() |>
@@ -132,7 +130,7 @@ server <- function(input, output, session) {
                placename = location,
                common_name = species_common_name) |>
         select(project_id,
-               deployment_id = location,                      # This nees to change if we want to include multiple deployments
+               deployment_id = location,
                placename,
                is_blank,
                class,
@@ -149,6 +147,134 @@ server <- function(input, output, session) {
       dfs <- dfs[!grepl("main_report.csv$", names(dfs))]
     }
     
+    # WildCo/Migrations format - check for stations.csv AND tags.csv
+    if (all(c("stations.csv", "tags.csv") %in% names(dfs))) {
+      
+      tryCatch({
+        
+        # Rename the raw images file to avoid overwriting it
+        if("images.csv" %in% names(dfs)) {
+          dfs[["images_raw.csv"]] <- dfs[["images.csv"]]
+          dfs[["images.csv"]] <- NULL
+        }
+        
+        # Read the data
+        camera_checks <- dfs[["camera_checks.csv"]]
+        stations <- dfs[["stations.csv"]]
+        images_raw <- dfs[["images_raw.csv"]]
+        tags <- dfs[["tags.csv"]]
+        species <- dfs[["species.csv"]]
+        
+        # Create deployments.csv
+        deployments_df <- camera_checks |>
+          left_join(stations, by = c("station_id", "project_id")) |>
+          rename(placename = station_id, feature_type = feature) |>
+          mutate(
+            project_id = as.character(project_id),
+            start_date = ymd(substr(check_date, 1, 10)),
+            end_date = ymd(substr(stop_date, 1, 10)),
+            days = as.numeric(difftime(end_date, start_date, units = "days")),
+            deployment_id = paste0(placename, "_", start_date)
+          ) |>
+          select(
+            project_id,
+            deployment_id,
+            placename,
+            longitude,
+            latitude,
+            start_date,
+            end_date,
+            feature_type,
+            days
+          ) |>
+          arrange(placename, start_date)
+        
+        dfs[["deployments.csv"]] <- deployments_df
+        
+        # Process tags
+        tags_processed <- tags |>
+          select(-any_of(c("_id", "species"))) |>
+          left_join(species, by = "species_id")
+        
+        # Create images.csv - with proper deployment assignment and no warnings
+        dfs[["images.csv"]] <- images_raw |>
+          left_join(tags_processed, by = c("_id" = "image_id")) |>
+          filter(!is.na(species_id)) |>
+          mutate(
+            project_id = as.character(project_id),
+            placename = station_id,
+            timestamp = ymd_hms(exif_timestamp),
+            class = "Mammalia",
+            order = tolower(order_taxo),
+            family = tolower(family_taxo),
+            genus = tolower(genus_taxo),
+            species = tolower(species_taxo),
+            common_name = common_names,
+            is_blank = 0L,
+            sp = paste0(genus_taxo, ".", species_taxo),
+            number_of_objects = coalesce(as.numeric(species_count), 1),
+            image_date = as.Date(timestamp)
+          ) |>
+          # Join with all deployments for each station
+          left_join(
+            deployments_df |> select(placename, deployment_id, start_date, end_date),
+            by = "placename",
+            relationship = "many-to-many"
+          ) |>
+          # Assign deployment based on rules
+          group_by(placename, timestamp) |>
+          mutate(
+            within_period = image_date >= start_date & image_date <= end_date,
+            before_first = image_date < min(start_date),
+            is_first_deployment = start_date == min(start_date),
+            after_deployment = image_date > end_date,
+            days_after = if_else(after_deployment, as.numeric(image_date - end_date), Inf),
+            # Find if this is the closest past deployment
+            min_days_after = if_else(
+              any(after_deployment), 
+              min(days_after[after_deployment], na.rm = TRUE), 
+              Inf
+            ),
+            is_closest_past = after_deployment & (days_after == min_days_after)
+          ) |>
+          filter(
+            within_period |  # Image within deployment period
+              (before_first & is_first_deployment) |  # Before first deployment
+              (sum(within_period) == 0 & is_closest_past)  # After deployment - closest past one
+          ) |>
+          ungroup() |>
+          select(
+            project_id,
+            deployment_id,
+            placename,
+            is_blank,
+            class,
+            order,
+            family,
+            genus,
+            species,
+            common_name,
+            sp,
+            timestamp,
+            number_of_objects,
+            age = age_category,
+            sex = sex
+          )
+        
+        message("WildCo processing complete!")
+        
+        # Remove the original WildCo files from dfs
+        wildco_files <- c("camera_checks.csv", "stations.csv", "tags.csv", "species.csv", "images_raw.csv")
+        dfs <- dfs[!names(dfs) %in% wildco_files]
+        
+      }, error = function(e) {
+        message("WildCo processing error: ", e$message)
+        print(e)
+        showNotification(paste("Error processing WildCo data:", e$message), 
+                         type = "error", duration = NULL)
+      })
+    }
+    
     # Ensure the reactiveValues object updates properly
     isolate({
       if (length(dfs) > 0) {
@@ -158,8 +284,10 @@ server <- function(input, output, session) {
       }
     })
     
-  })
+  })  # <-- This closes observeEvent(input$files, {
   
+  
+  # Clear data button
   observeEvent(input$clear_files, {
     
     data_store$dfs <- list()
@@ -176,8 +304,8 @@ server <- function(input, output, session) {
     selectInput("choice", "Select a File to Preview",
                 choices = names(data_store$dfs),
                 selected = names(data_store$dfs)[1])
-  
-    })
+    
+  })
   
   # Render a preview of the selected file
   output$custom_data_preview <- renderDT({
@@ -189,7 +317,7 @@ server <- function(input, output, session) {
     
   })
   
-   
+  
   # Reactive Map ------------------------------------------------------------------------
   output$map <- renderLeaflet({
     validate(
@@ -229,7 +357,7 @@ server <- function(input, output, session) {
         options = layersControlOptions(collapsed = FALSE)) |>
       #Add a scale bar
       addScaleBar(position = "topleft")
-
+    
     
   })
   
@@ -245,7 +373,7 @@ server <- function(input, output, session) {
     # Call the saved data
     deployments <- data_store$dfs[["deployments.csv"]]
     images <- data_store$dfs[["images.csv"]]
-  
+    
     # Call the plot
     p <- plot_ly()
     
@@ -259,37 +387,37 @@ server <- function(input, output, session) {
       tmp <- deployments[deployments$placename==levels(deployments$placename)[i],]
       # Order by date
       tmp <- tmp[order(tmp$start_date),]
-       # Loop through each deployment at that placename
+      # Loop through each deployment at that placename
       for(j in 1:nrow(tmp))
       {
         # Add a box reflecting the first and last image for each deployment
         tmp_img <- images[images$deployment_id==tmp$deployment_id[j],]
         # Only run if there are images
         if(nrow(tmp_img>0))
-          {
-        # Add an orange colour block to show when images were collected
-        p <- add_trace(p,
-                       #Use the start and end date as x coordinates
-                       x = c(min(tmp_img$timestamp), max(tmp_img$timestamp)),
-                       #Use the counter for the y coordinates
-                       y = c(i,i),
-                       # State the type of chart
-                       type="scatter",
-                       # make a line that also has points
-                       mode = "lines",
-                       # Add the deployment ID as hover text
-                       hovertext=paste0(tmp$deployment_id[j]),
-                                        #,"<br>",
-                                        #,"Start: ",min(tmp_img$timestamp), "<br>",
-                                        #,"End: ", max(tmp_img$timestamp)),           # NOT WORKING CURRENTLY
-                       color=I("orange"),
-                       # Color it all black
-                       line=list(
-                       width=8,
-                       opacity=0.5),
-                       # Suppress the legend
-                       showlegend = FALSE)
-            }
+        {
+          # Add an orange colour block to show when images were collected
+          p <- add_trace(p,
+                         #Use the start and end date as x coordinates
+                         x = c(min(tmp_img$timestamp), max(tmp_img$timestamp)),
+                         #Use the counter for the y coordinates
+                         y = c(i,i),
+                         # State the type of chart
+                         type="scatter",
+                         # make a line that also has points
+                         mode = "lines",
+                         # Add the deployment ID as hover text
+                         hovertext=paste0(tmp$deployment_id[j]),
+                         #,"<br>",
+                         #,"Start: ",min(tmp_img$timestamp), "<br>",
+                         #,"End: ", max(tmp_img$timestamp)),           # NOT WORKING CURRENTLY
+                         color=I("orange"),
+                         # Color it all black
+                         line=list(
+                           width=8,
+                           opacity=0.5),
+                         # Suppress the legend
+                         showlegend = FALSE)
+        }
         # Add a black line to 'p' denotting the start and end periods of each deployment + we add one to the end dat as it plots at mignight and looks like some image data fall outside of the deployment window
         p <- add_trace(p, 
                        #Use the start and end date as x coordinates
@@ -328,7 +456,7 @@ server <- function(input, output, session) {
              modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
     
   })
-
+  
   
   # Independent data creation  ---------------------------------------------------
   
@@ -357,7 +485,7 @@ server <- function(input, output, session) {
                       selected = default_selection)
   })
   
-
+  
   # Create waiter instance (for showing users that something is happening when they click on the button)
   w <- Waiter$new(id = "ind_run", html = spin_ellipsis(), color = "grey20")
   
@@ -394,7 +522,7 @@ server <- function(input, output, session) {
     
     # Set the Results flag to TRUE
     results_ready(TRUE)
-
+    
     # Hide spinner when processing is done
     w$hide()
     
@@ -416,8 +544,8 @@ server <- function(input, output, session) {
       
       DT::datatable(results_store$data[[input$analysis_choice]],
                     options = list(scrollX = TRUE))
-  })
-  
+    })
+    
     output$results_box <- renderUI({
       req(results_store$data)  # Only render when results exists
       
@@ -431,7 +559,7 @@ server <- function(input, output, session) {
         
       )
     })
-  
+    
     
     # Download a zipfile of the formatted data
     output$download_results <- downloadHandler(
@@ -464,9 +592,9 @@ server <- function(input, output, session) {
     )
     
     
-
-######################      
-# detection summaries -----------------------------------------------------------    
+    
+    ######################      
+    # detection summaries -----------------------------------------------------------    
     
     
     # Create summary statistics output
@@ -601,10 +729,10 @@ server <- function(input, output, session) {
         layout(height = max(400, nrow(sp_summary) * 20))
     }) 
     
-  
-
-#############################
-# Temporal patterns -----------------------------------------------------------    
+    
+    
+    #############################
+    # Temporal patterns -----------------------------------------------------------    
     # Code to show error meesage before indenedent data is created
     # Temporal plots output
     output$temporal_plots_output <- renderUI({
@@ -639,54 +767,54 @@ server <- function(input, output, session) {
     ########################
     
     
- 
-  # # Static Plot 1: Number of Active Cameras Over Time
-  output$camera_effort_plot <- renderPlotly({
-
-    # Pull in the right data
-    mon_obs <- results_store$data[["independent_monthly_observations"]]
-    sp_summary <- results_store$data[["species_list"]]
     
-    mon_summary <- mon_obs %>%        
-      group_by(date) %>%              
-      summarise(locs_active=n(),      
-                cam_days=sum(days))   
-    
-    mon_summary_species <- mon_obs %>% 
-      group_by(date) %>%  
-      summarise(across(sp_summary$sp, sum, na.rm=TRUE))
-    
-    mon_summary <- left_join(mon_summary, mon_summary_species, by = "date")  # Proper join
-    
-     # Update date format
+    # # Static Plot 1: Number of Active Cameras Over Time
+    output$camera_effort_plot <- renderPlotly({
+      
+      # Pull in the right data
+      mon_obs <- results_store$data[["independent_monthly_observations"]]
+      sp_summary <- results_store$data[["species_list"]]
+      
+      mon_summary <- mon_obs %>%        
+        group_by(date) %>%              
+        summarise(locs_active=n(),      
+                  cam_days=sum(days))   
+      
+      mon_summary_species <- mon_obs %>% 
+        group_by(date) %>%  
+        summarise(across(sp_summary$sp, sum, na.rm=TRUE))
+      
+      mon_summary <- left_join(mon_summary, mon_summary_species, by = "date")  # Proper join
+      
+      # Update date format
       mon_summary$date <- ym(mon_summary$date)
       
-    p1  <- plot_ly(mon_summary, x = ~date, y = ~locs_active, type = "scatter", mode = "lines",
-                   line = list(color = "blue"), name = "Active Cameras") %>%
-      layout(title = "Active Cameras Over Time",
-             xaxis = list(title = "Date"),
-             yaxis = list(title = "Active Cameras", rangemode = "tozero")) %>%
-      config(displayModeBar = TRUE,
-             modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
-
-    
-    
-    mon_summary$all.sp <- rowSums(mon_summary[, sp_summary$sp])
-    mon_summary$all.cr <- mon_summary$all.sp/(mon_summary$cam_days/100)
-
-    p2 <- plot_ly(mon_summary, x = ~date, y = ~all.cr, type = "scatter", mode = "lines",
-                  line = list(color = "darkred"), name = "Capture Rate per 100 days") %>%
-      layout(title = "Overall Capture Rates (All Species)",
-             xaxis = list(title = "Date"),
-             yaxis = list(title = "Capture Rate per 100 days", rangemode = "tozero")) %>%
-      config(displayModeBar = TRUE,
-             modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
-    
-    # Combine plots vertically using subplot()
-    subplot(p1, p2, nrows = 2, shareX = TRUE, titleY = TRUE) %>% layout(height = 700)
-    
+      p1  <- plot_ly(mon_summary, x = ~date, y = ~locs_active, type = "scatter", mode = "lines",
+                     line = list(color = "blue"), name = "Active Cameras") %>%
+        layout(title = "Active Cameras Over Time",
+               xaxis = list(title = "Date"),
+               yaxis = list(title = "Active Cameras", rangemode = "tozero")) %>%
+        config(displayModeBar = TRUE,
+               modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
+      
+      
+      
+      mon_summary$all.sp <- rowSums(mon_summary[, sp_summary$sp])
+      mon_summary$all.cr <- mon_summary$all.sp/(mon_summary$cam_days/100)
+      
+      p2 <- plot_ly(mon_summary, x = ~date, y = ~all.cr, type = "scatter", mode = "lines",
+                    line = list(color = "darkred"), name = "Capture Rate per 100 days") %>%
+        layout(title = "Overall Capture Rates (All Species)",
+               xaxis = list(title = "Date"),
+               yaxis = list(title = "Capture Rate per 100 days", rangemode = "tozero")) %>%
+        config(displayModeBar = TRUE,
+               modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
+      
+      # Combine plots vertically using subplot()
+      subplot(p1, p2, nrows = 2, shareX = TRUE, titleY = TRUE) %>% layout(height = 700)
+      
     })
-
+    
     # Interactive Plot: Capture Rates for Selected Species
     output$species_trends_plot <- renderPlotly({  # Changed from renderPlot
       req(input$selected_species)  # Ensure a species is selected
@@ -735,13 +863,13 @@ server <- function(input, output, session) {
                modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
       
     })
-
-
     
-#################
-# Spatial patterns 
     
-   
+    
+    #################
+    # Spatial patterns 
+    
+    
     # Code to show error meesage before indenedent data is created
     # Spatial plots output
     output$spatial_plots_output <- renderUI({
@@ -762,9 +890,9 @@ server <- function(input, output, session) {
           ),
           fluidRow(
             column(12, downloadButton("download_map_png", "Download Map as PNG", icon = icon("camera"))
-,
-p(),
-leafletOutput("capture_map"))
+                   ,
+                   p(),
+                   leafletOutput("capture_map"))
           ),
           hr(),
           fluidRow(
@@ -780,7 +908,7 @@ leafletOutput("capture_map"))
       }
     })
     
- 
+    
     output$capture_map <- renderLeaflet({
       
       req(input$selected_species_map) 
@@ -826,7 +954,7 @@ leafletOutput("capture_map"))
         ) %>%   
         addScaleBar(position = "topleft") %>%
         addControl(html = legend_html, position = "bottomright")
-        
+      
     })
     
     # Download map button 
@@ -884,9 +1012,9 @@ leafletOutput("capture_map"))
       }
     )
     
-
-#################
-# Spatial co-ocurance 
+    
+    #################
+    # Spatial co-ocurance 
     
     
     
@@ -907,13 +1035,12 @@ leafletOutput("capture_map"))
                diag=FALSE)
     })
     
-  
     
-        
-# End of observeEvent(input$ind_run
-})
+    
+    
+    # End of observeEvent(input$ind_run
+  })
   
-
+  
   
 }
-
