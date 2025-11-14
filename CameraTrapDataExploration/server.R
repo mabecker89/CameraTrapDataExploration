@@ -76,6 +76,9 @@ server <- function(input, output, session) {
         !all(c("stations.csv", "tags.csv") %in% names(dfs)) &&
         !any(str_detect(names(dfs), "main_report.csv$"))) {
       
+      #Update the project ID column
+      dfs[["deployments.csv"]]$project_id <- dfs[["projects.csv"]]$project_name[1] 
+      
       # Format appropriate dates and create a species column
       dfs[["images.csv"]]$sp <- paste0(dfs[["images.csv"]]$genus, ".", dfs[["images.csv"]]$species)
       dfs[["images.csv"]]$timestamp <- ymd_hms(dfs[["images.csv"]]$timestamp)
@@ -1035,6 +1038,216 @@ server <- function(input, output, session) {
                diag=FALSE)
     })
     
+    
+    
+    # Generate Word Report -------------------------------------------------------
+    output$generate_report <- downloadHandler(
+      filename = function() {
+        req(results_ready())
+        # Get project name from deployments
+        project_name <- data_store$dfs[["deployments.csv"]]$project_id[1]
+        paste0("Camera_Trap_Report_", project_name, "_", format(Sys.Date(), "%Y%m%d"), ".docx")
+      },
+      content = function(file) {
+        req(results_ready())
+        
+        # Show loading spinner
+        waiter_show(
+          html = spin_fading_circles(),
+          color = "rgba(0,0,0,0.8)"
+        )
+        
+        # Ensure spinner hides even if there's an error
+        on.exit(waiter_hide())
+        
+        # Load required packages
+        require(officer)
+        require(flextable)
+        
+        # Get project name
+        project_name <- data_store$dfs[["deployments.csv"]]$project_id[1]
+        
+        # Create a new Word document
+        doc <- read_docx()
+        
+        # Add title with project name
+        doc <- doc |>
+          body_add_par(paste("Camera Trap Survey Report:", project_name), style = "heading 1") |>
+          body_add_par(paste("Generated:", format(Sys.Date(), "%B %d, %Y")), style = "Normal") |>
+          body_add_par("", style = "Normal")
+        
+        # Add summary statistics
+        total_stations <- nrow(results_store$data[["camera_locations"]])
+        total_survey_nights <- sum(results_store$data[["independent_total_observations"]]$days)
+        total_species <- nrow(results_store$data[["species_list"]])
+        total_detections <- sum(results_store$data[["independent_total_observations"]][, results_store$data[["species_list"]]$sp])
+        avg_nights <- mean(results_store$data[["independent_total_observations"]]$days)
+        row_lookup <- results_store$data[["row_lookup"]]
+        date_range <- paste(format(min(row_lookup$date), "%b %Y"), "to", format(max(row_lookup$date), "%b %Y"))
+        
+        doc <- doc |>
+          body_add_par("Survey Summary", style = "heading 2") |>
+          body_add_par(paste("Survey Period:", date_range), style = "Normal") |>
+          body_add_par(paste("Unique Stations:", total_stations), style = "Normal") |>
+          body_add_par(paste("Total Camera Trap Days:", round(total_survey_nights, 0)), style = "Normal") |>
+          body_add_par(paste("Average Days per Station:", round(avg_nights, 1)), style = "Normal") |>
+          body_add_par(paste("Species Detected:", total_species), style = "Normal") |>
+          body_add_par(paste("Total Independent Detections:", total_detections), style = "Normal") |>
+          body_add_par("", style = "Normal")
+        
+        # Add species list table with detections and occupancy
+        doc <- doc |>
+          body_add_par("Species Summary", style = "heading 2")
+        
+        # Calculate detections and occupancy for each species
+        long_obs <- results_store$data[["independent_total_observations"]] %>% 
+          pivot_longer(cols=results_store$data[["species_list"]]$sp,
+                       names_to="sp",
+                       values_to = "count")
+        
+        detections_summary <- long_obs %>%
+          group_by(sp) %>%
+          summarise(total_detections = sum(count))
+        
+        # Calculate occupancy (proportion of stations)
+        total_binary <- results_store$data[["independent_total_observations"]] %>%
+          mutate(across(results_store$data[["species_list"]]$sp, ~+as.logical(.x)))
+        
+        long_bin <- total_binary %>% 
+          pivot_longer(cols=results_store$data[["species_list"]]$sp, names_to="sp", values_to = "count")
+        
+        occupancy_summary <- long_bin %>% 
+          group_by(sp) %>% 
+          summarise(prop_stations = sum(count)/total_stations)
+        
+        # Join with species list
+        species_summary_table <- results_store$data[["species_list"]] |>
+          left_join(detections_summary, by = "sp") |>
+          left_join(occupancy_summary, by = "sp") |>
+          select(common_name, genus, species, total_detections, prop_stations) |>
+          mutate(
+            common_name = substr(common_name, 1, 30),  # Truncate to 30 characters
+            total_detections = round(total_detections, 2),
+            prop_stations = round(prop_stations, 2)
+          ) |>
+          flextable() |>
+          set_header_labels(
+            common_name = "Common\nName", 
+            genus = "Genus", 
+            species = "Species",
+            total_detections = "Independent\nDetections",
+            prop_stations = "Proportion of\nStations"
+          ) |>
+          fontsize(size = 8, part = "all") |>  # Reduce font size by ~20% (10 to 8)
+          autofit()
+        
+        doc <- doc |> body_add_flextable(species_summary_table)
+        
+        # Add survey location map
+        doc <- doc |>
+          body_add_par("", style = "Normal") |>
+          body_add_par("Survey Locations", style = "heading 2")
+        
+        # Create static map
+        
+        deployments <- data_store$dfs[["deployments.csv"]]
+        locs <- deployments |>
+          select(placename, longitude, latitude) |>
+          distinct()
+        
+        # Create sf object
+        locs_sf <- st_as_sf(locs, coords = c("longitude", "latitude"), crs = 4326)
+        
+        # Create map with OSM basemap
+        map_plot <- ggplot() +
+          annotation_map_tile(type = "osm", zoomin = 0) +  # OpenStreetMap basemap
+          geom_sf(data = locs_sf, color = "red", size = 3, shape = 17) +
+          annotation_scale(location = "bl", width_hint = 0.3) +  # Scale bar
+          annotation_north_arrow(location = "tr", which_north = "true",  # North arrow
+                                 style = north_arrow_fancy_orienteering) +
+          theme_minimal() +
+          theme(text = element_text(size = 10))
+        
+        # Save and add to document
+        temp_map <- tempfile(fileext = ".png")
+        ggsave(temp_map, plot = map_plot, width = 6, height = 4.5, dpi = 300)
+        doc <- doc |> body_add_img(temp_map, width = 6, height = 4.5)
+        
+        # Add detection summary plot
+        doc <- doc |>
+          body_add_par("", style = "Normal") |>
+          body_add_par("Detection Summary", style = "heading 2")
+        
+        sp_summary <- results_store$data[["species_list"]] |>
+          left_join(detections_summary, by = "sp") |>
+          arrange(total_detections)
+        
+        # Create ggplot
+        p1 <- ggplot(sp_summary, aes(x = reorder(sp, total_detections), y = total_detections)) +
+          geom_col(fill = "steelblue") +
+          coord_flip() +
+          labs(x = NULL, y = "Independent Detections") +
+          theme_minimal() +
+          theme(text = element_text(size = 10))
+        
+        # Save plot temporarily and add to document
+        temp_plot <- tempfile(fileext = ".png")
+        ggsave(temp_plot, plot = p1, width = 6, height = max(3, nrow(sp_summary) * 0.2), dpi = 300)
+        doc <- doc |> body_add_img(temp_plot, width = 6, height = max(3, nrow(sp_summary) * 0.2))
+        
+        # Add temporal patterns
+        doc <- doc |>
+          body_add_par("", style = "Normal") |>
+          body_add_par("Temporal Patterns", style = "heading 2")
+        
+        mon_obs <- results_store$data[["independent_monthly_observations"]]
+        sp_summary_full <- results_store$data[["species_list"]]
+        
+        mon_summary <- mon_obs %>%        
+          group_by(date) %>%              
+          summarise(locs_active=n(), cam_days=sum(days))   
+        
+        mon_summary_species <- mon_obs %>% 
+          group_by(date) %>%  
+          summarise(across(sp_summary_full$sp, sum, na.rm=TRUE))
+        
+        mon_summary <- left_join(mon_summary, mon_summary_species, by = "date")
+        mon_summary$date <- ym(mon_summary$date)
+        mon_summary$all.sp <- rowSums(mon_summary[, sp_summary_full$sp])
+        mon_summary$all.cr <- mon_summary$all.sp/(mon_summary$cam_days/100)
+        
+        # Camera effort plot
+        p2 <- ggplot(mon_summary, aes(x = date, y = locs_active)) +
+          geom_line(color = "blue", size = 1) +
+          labs(x = "Date", y = "Active Cameras", title = "Active Cameras Over Time") +
+          theme_minimal() +
+          theme(text = element_text(size = 10))
+        
+        temp_plot2 <- tempfile(fileext = ".png")
+        ggsave(temp_plot2, plot = p2, width = 6, height = 3, dpi = 300)
+        doc <- doc |> body_add_img(temp_plot2, width = 6, height = 3)
+        
+        # Capture rate plot
+        p3 <- ggplot(mon_summary, aes(x = date, y = all.cr)) +
+          geom_line(color = "darkred", size = 1) +
+          labs(x = "Date", y = "Capture Rate per 100 days", title = "Overall Capture Rates") +
+          theme_minimal() +
+          theme(text = element_text(size = 10))
+        
+        temp_plot3 <- tempfile(fileext = ".png")
+        ggsave(temp_plot3, plot = p3, width = 6, height = 3, dpi = 300)
+        doc <- doc |> body_add_img(temp_plot3, width = 6, height = 3)
+        
+        # Save the document
+        print(doc, target = file)
+        
+        # Clean up temp files
+        unlink(c(temp_plot, temp_plot2, temp_plot3, temp_map))
+        
+        # Hide spinner (though on.exit will also do this)
+        waiter_hide()
+      }
+    )
     
     
     

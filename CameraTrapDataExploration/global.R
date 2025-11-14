@@ -21,6 +21,10 @@ library(corrplot)
 library(zip)
 library(mapview)
 library(webshot2)
+library(officer)
+library(flextable)
+library(ggspatial)
+library(prettymapr)
 
 # Set max file size to 100 MB
 options(shiny.maxRequestSize = 100 * 1024^2)

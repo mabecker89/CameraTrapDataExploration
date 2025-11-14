@@ -27,7 +27,7 @@ sidebar <- dashboardSidebar(
     #         menuSubItem("Covariate Plots", tabName = "covariate")
              ),
     menuItem("Glossary", tabName = "glossary", icon = icon("table")),
-    menuItem("Report", tabName = "report", icon = icon("book"))
+    menuItem("Static Report", tabName = "report", icon = icon("book"))
   )
 )
 
@@ -277,6 +277,42 @@ ui_temporal <- fluidRow(
 
 # Spatial maps of captures  ----------------------------------------------------------------------------------------------------------
 
+ui_report <- fluidRow(
+  column(
+    width = 12,
+    titlePanel("Generate Report"),
+    "Generate a comprehensive Word document report of your camera trap survey results. The report includes:",
+    tags$ul(
+      tags$li("Survey summary statistics"),
+      tags$li("Complete species list"),
+      tags$li("Detection summary charts"),
+      tags$li("Temporal patterns of camera effort and capture rates")
+    ),
+    p(),
+    
+    conditionalPanel(
+      condition = "output.button_clicked == false",
+      box(
+        width = 12,
+        h4("Independent detections not yet created.", style = "color: #777; text-align: center; padding: 20px;")
+      )
+    ),
+    
+    conditionalPanel(
+      condition = "output.button_clicked == true",
+      box(
+        width = 12,
+        downloadButton("generate_report", "Generate Report (.docx)", 
+                       icon = icon("file-word"),
+                       class = "btn-primary btn-lg")
+      )
+    )
+  )
+)
+
+
+
+# DTOutput("test_table")  
 ui_spatial_caps <- fluidRow(
   
   column(
@@ -296,13 +332,42 @@ ui_spatial_caps <- fluidRow(
     uiOutput("spatial_plots_output")
   )
 )
-
-
-
-# DTOutput("test_table")  
-
     
 # ----------------------------------------------------------------------------------------------------------
+
+# Then in the body, add:
+tabItem(tabName = "report",
+        fluidRow(
+          column(12,
+                 box(
+                   title = "Generate Static Report",
+                   width = 12,
+                   "Generate a static Word document report of your camera trap survey results. The report includes:",
+                   tags$ul(
+                     tags$li("Survey summary statistics"),
+                     tags$li("Complete species list"),
+                     tags$li("Detection summary charts"),
+                     tags$li("Temporal patterns of camera effort and capture rates")
+                   ),
+                   p(),
+                   conditionalPanel(
+                     condition = "output.button_clicked",
+                     downloadButton("generate_report", "Generate Report (.docx)", 
+                                    icon = icon("file-word"),
+                                    class = "btn-primary btn-lg")
+                   ),
+                   conditionalPanel(
+                     condition = "!output.button_clicked",
+                     h4("Please create independent detection data first", 
+                        style = "color: #777; text-align: center; padding: 20px;")
+                   )
+                 )
+          )
+        )
+)
+
+#-----------------------------------------------------------------------------------
+
 
 body <- dashboardBody(
   autoWaiter(),
@@ -318,7 +383,7 @@ body <- dashboardBody(
     tabItem("temporal", ui_temporal),
     tabItem("spatial_capture", ui_spatial_caps),
     tabItem("glossary"),
-    tabItem("report")
+    tabItem("report", ui_report)
   )
 )
 
