@@ -43,7 +43,7 @@ ui_welcome <- fluidRow(
     p(),
     HTML("To use this tool, <b>you must follow two simple rules</b>:"),
     p(),
-    "1. Use the tabs sequentially, as the output of a the follow tab typically depends on the tab previous to it.",
+    "1. Use the tabs sequentially, as the output of a given tab typically depends on the tab previous to it.",
     p(),
     "2. Your data must either be .zip files from the Wildlife Insights or WildTrax platforms, or a set of .csv files with the same names and formats as from those platforms. We have provided templates in this folder [LINK TBC]",
     p(),
@@ -55,7 +55,7 @@ ui_welcome <- fluidRow(
     p(),
     p(),
     HTML("This creation of this tool has been supported by <a href='https://wildcams.ca/'>WildCAM</a> (Wildlife Cameras for Adaptive Management); 
-         the BC Government; and NSERC."),
+         the BC Government; the <a href='https://wildlife.forestry.ubc.ca/'>Wildlife Coexistence Lab at UBC</a> and NSERC."),
     p(),
     tags$img(src = "https://raw.githubusercontent.com/mabecker89/CameraTrapDataExploration/refs/heads/main/imgs/merged%20logos.png",
          style = "max-width: 500px; height: auto;")
