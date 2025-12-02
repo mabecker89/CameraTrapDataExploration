@@ -720,7 +720,7 @@ server <- function(input, output, session) {
                modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
       
       yform <- list(categoryorder = "array", categoryarray = sp_summary$sp, showticklabels=F)
-      xform <- list(title="Naive occupancy")
+      xform <- list(title="Proportion of stations detected")
       
       fig2 <- plot_ly(x = sp_summary$occupancy, y = sp_summary$sp, type = 'bar', orientation = 'h', name="occupancy") %>% 
         layout(yaxis = yform, xaxis=xform) %>%
@@ -736,8 +736,7 @@ server <- function(input, output, session) {
     
     #############################
     # Temporal patterns -----------------------------------------------------------    
-    # Code to show error meesage before indenedent data is created
-    # Temporal plots output
+    # Code to show error message before independent data is created
     output$temporal_plots_output <- renderUI({
       if (!results_ready()) {
         box(
@@ -749,131 +748,179 @@ server <- function(input, output, session) {
         
         tagList(
           fluidRow(
+            column(width = 4, offset = 4,  # Center the period selector
+                   selectInput("temporal_period", "Aggregation Period:",
+                               choices = c("Day" = "day", "Week" = "week", "Month" = "month"),
+                               selected = "month")
+            )
+          ),
+          fluidRow(
             column(12, plotlyOutput("camera_effort_plot", height="700px"))  
           ),
           hr(),
           "You can also see the capture rate through time for each of the species included in the species list:",
           p(),
           fluidRow(
-            column(4,
+            column(width = 6, offset = 3,  # Center the species selector
                    selectInput("selected_species", "Select Species:",
                                choices = species_choices,
                                selected = species_choices[1])
-            ),
-            column(8, plotlyOutput("species_trends_plot")) 
+            )
+          ),
+          fluidRow(
+            column(12, plotlyOutput("species_trends_plot"))
           )
         )
       }
     })
     
+    # Reactive aggregated temporal data
+    temporal_summary <- reactive({
+      req(input$temporal_period)
+      
+      sp_list <- results_store$data[["species_list"]]$sp
+      
+      # Use the appropriate pre-calculated dataframe based on selected period
+      if (input$temporal_period == "day") {
+        summary_data <- results_store$data[["independent_daily_observations"]]
+        summary_data$period <- as.Date(summary_data$date)
+        
+        # Create complete date sequence
+        date_range <- seq(min(summary_data$period), max(summary_data$period), by = "day")
+        complete_periods <- data.frame(period = date_range)
+        
+      } else if (input$temporal_period == "week") {
+        summary_data <- results_store$data[["independent_weekly_observations"]]
+        
+        # Parse ISO week format (e.g., "2025-W15") to date
+        # Convert to the Monday of that week
+        summary_data$period <- ISOweek::ISOweek2date(paste0(summary_data$date, "-1"))
+        
+        # Create complete week sequence
+        date_range <- seq(min(summary_data$period), max(summary_data$period), by = "week")
+        complete_periods <- data.frame(period = date_range)
+        
+      } else {
+        summary_data <- results_store$data[["independent_monthly_observations"]]
+        summary_data$period <- ym(summary_data$date)
+        
+        # Create complete month sequence
+        date_range <- seq(min(summary_data$period), max(summary_data$period), by = "month")
+        complete_periods <- data.frame(period = date_range)
+      }
+      
+      # Aggregate by period first
+      period_aggregated <- summary_data %>%
+        group_by(period) %>%
+        summarise(
+          locs_active = n(),
+          cam_days = sum(days),
+          across(all_of(sp_list), sum, na.rm = TRUE),
+          .groups = "drop"
+        )
+      
+      # Join with complete periods and fill NAs with 0
+      result <- complete_periods %>%
+        left_join(period_aggregated, by = "period") %>%
+        mutate(
+          locs_active = replace_na(locs_active, 0),
+          cam_days = replace_na(cam_days, 0),
+          across(all_of(sp_list), ~replace_na(.x, 0))
+        )
+      
+      return(result)
+    })
     
-    ########################
-    
-    
-    
-    # # Static Plot 1: Number of Active Cameras Over Time
+    # Static Plot 1: Number of Active Cameras Over Time
     output$camera_effort_plot <- renderPlotly({
       
-      # Pull in the right data
-      mon_obs <- results_store$data[["independent_monthly_observations"]]
+      req(temporal_summary())
+      
+      # Pull in the aggregated data (already has zeros filled in)
+      period_summary <- temporal_summary()
       sp_summary <- results_store$data[["species_list"]]
       
-      mon_summary <- mon_obs %>%        
-        group_by(date) %>%              
-        summarise(locs_active=n(),      
-                  cam_days=sum(days))   
+      # Calculate overall capture rate
+      period_summary$all.sp <- rowSums(period_summary[, sp_summary$sp])
+      # Avoid division by zero
+      period_summary$all.cr <- ifelse(period_summary$cam_days > 0, 
+                                      period_summary$all.sp / (period_summary$cam_days / 100),
+                                      0)
       
-      mon_summary_species <- mon_obs %>% 
-        group_by(date) %>%  
-        summarise(across(sp_summary$sp, sum, na.rm=TRUE))
+      # Set x-axis title based on period
+      x_title <- switch(input$temporal_period,
+                        "day" = "Date",
+                        "week" = "Week",
+                        "month" = "Month")
       
-      mon_summary <- left_join(mon_summary, mon_summary_species, by = "date")  # Proper join
-      
-      # Update date format
-      mon_summary$date <- ym(mon_summary$date)
-      
-      p1  <- plot_ly(mon_summary, x = ~date, y = ~locs_active, type = "scatter", mode = "lines",
-                     line = list(color = "blue"), name = "Active Cameras") %>%
+      # Plot 1: Active cameras
+      p1 <- plot_ly(period_summary, x = ~period, y = ~locs_active, type = "scatter", mode = "lines",
+                    line = list(color = "blue"), name = "Number of Active Cameras") %>%
         layout(title = "Active Cameras Over Time",
-               xaxis = list(title = "Date"),
+               xaxis = list(title = x_title),
                yaxis = list(title = "Active Cameras", rangemode = "tozero")) %>%
         config(displayModeBar = TRUE,
-               modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
+               modeBarButtonsToRemove = c('lasso2d', 'toggleSpikelines', 'hoverClosestCartesian', 
+                                          'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
       
-      
-      
-      mon_summary$all.sp <- rowSums(mon_summary[, sp_summary$sp])
-      mon_summary$all.cr <- mon_summary$all.sp/(mon_summary$cam_days/100)
-      
-      p2 <- plot_ly(mon_summary, x = ~date, y = ~all.cr, type = "scatter", mode = "lines",
+      # Plot 2: Capture rates
+      p2 <- plot_ly(period_summary, x = ~period, y = ~all.cr, type = "scatter", mode = "lines",
                     line = list(color = "darkred"), name = "Capture Rate per 100 days") %>%
         layout(title = "Overall Capture Rates (All Species)",
-               xaxis = list(title = "Date"),
+               xaxis = list(title = x_title),
                yaxis = list(title = "Capture Rate per 100 days", rangemode = "tozero")) %>%
         config(displayModeBar = TRUE,
-               modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
+               modeBarButtonsToRemove = c('lasso2d', 'toggleSpikelines', 'hoverClosestCartesian', 
+                                          'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
       
       # Combine plots vertically using subplot()
       subplot(p1, p2, nrows = 2, shareX = TRUE, titleY = TRUE) %>% layout(height = 700)
-      
     })
     
     # Interactive Plot: Capture Rates for Selected Species
-    output$species_trends_plot <- renderPlotly({  # Changed from renderPlot
-      req(input$selected_species)  # Ensure a species is selected
+    output$species_trends_plot <- renderPlotly({
+      req(input$selected_species, temporal_summary())
       
-      # Pull in the right data
-      mon_obs <- results_store$data[["independent_monthly_observations"]]
+      # Pull in the aggregated data (already has zeros filled in)
+      period_summary <- temporal_summary()
       sp_summary <- results_store$data[["species_list"]]
       
-      mon_summary <- mon_obs %>%        # Use the monthly observations dataframe
-        group_by(date) %>%              # Group by the date
-        summarise(locs_active=n(),      # Count the number of active cameras
-                  cam_days=sum(days))   # And sum the active days
-      
-      mon_summary <- mon_obs %>% 
-        group_by(date) %>%  
-        summarise(across(sp_summary$sp, sum, na.rm=TRUE)) %>% # summarise across all of 
-        # the species columns 
-        left_join(x=mon_summary) 
-      
-      # Update date format
-      mon_summary$date <- ym(mon_summary$date)
-      
-      # Wide to long
-      long_df <- mon_summary %>%
+      # Wide to long for selected species
+      long_df <- period_summary %>%
         pivot_longer(
-          cols = sp_summary$sp,  # All species columns will be gathered
-          names_to = "sp",  # New column for species names
-          values_to = "Count"  # New column for counts
+          cols = sp_summary$sp,
+          names_to = "sp",
+          values_to = "Count"
         ) %>%
-        mutate(CaptureRate = Count / (cam_days / 100))  # Calculate capture rate per 100 days
+        mutate(CaptureRate = ifelse(cam_days > 0, Count / (cam_days / 100), 0))
       
       filtered_data <- long_df %>%
         filter(sp == input$selected_species)
       
+      # Set x-axis title based on period
+      x_title <- switch(input$temporal_period,
+                        "day" = "Date",
+                        "week" = "Week",
+                        "month" = "Month")
+      
       # Create ggplot object
-      p <- ggplot(filtered_data, aes(x = date, y = CaptureRate)) +
+      p <- ggplot(filtered_data, aes(x = period, y = CaptureRate)) +
         geom_line(color = "darkgreen", size = 1) +
         labs(title = paste("Capture Rate of", input$selected_species),
-             x = "Date", y = "Capture Rate per 100 days") +
+             x = x_title, y = "Capture Rate per 100 days") +
         ylim(0, NA) + 
         theme_minimal()
       
       # Convert to plotly
       ggplotly(p) %>%
         config(displayModeBar = TRUE,
-               modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
-      
+               modeBarButtonsToRemove = c('lasso2d', 'toggleSpikelines', 'hoverClosestCartesian', 
+                                          'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
     })
-    
-    
-    
-    #################
+    ################# ----------------------------------------------------------------------------------------
     # Spatial patterns 
     
-    
-    # Code to show error meesage before indenedent data is created
+    # Code to show error message before independent data is created
     # Spatial plots output
     output$spatial_plots_output <- renderUI({
       if (!results_ready()) {
@@ -885,15 +932,34 @@ server <- function(input, output, session) {
         species_choices <- results_store$data[["species_list"]]$sp[order(results_store$data[["species_list"]]$sp)]
         
         tagList(
+          # Overall capture rate map
           fluidRow(
             column(12, 
-                   selectInput("selected_species_map", "Select Species:",
-                               choices = species_choices,
-                               selected = species_choices[1]))
+                   h3("Overall Capture Rate (All Species)"),
+                   p("This map shows the total capture rate across all species at each camera location."),
+                   downloadButton("download_overall_map_png", "Download Overall Map as PNG", icon = icon("camera")),
+                   p(),
+                   leafletOutput("overall_capture_map")
+            )
+          ),
+          hr(),
+          # Species-specific maps
+          fluidRow(
+            column(12, 
+                   h3("Species-Specific Capture Rates"),
+                   p("Select a species to view its capture rate distribution across camera locations.")
+            )
           ),
           fluidRow(
-            column(12, downloadButton("download_map_png", "Download Map as PNG", icon = icon("camera"))
-                   ,
+            column(width = 6, offset = 3,  # Center the dropdown
+                   selectInput("selected_species_map", "Select Species:",
+                               choices = species_choices,
+                               selected = species_choices[1])
+            )
+          ),
+          fluidRow(
+            column(12, 
+                   downloadButton("download_map_png", "Download Species Map as PNG", icon = icon("camera")),
                    p(),
                    leafletOutput("capture_map"))
           ),
@@ -901,7 +967,7 @@ server <- function(input, output, session) {
           fluidRow(
             column(12, titlePanel("Spatial co-occurences"))
           ),
-          "The following plot shows the co-occurance correlations between different species in your survey:",
+          "The following plot shows the co-occurrence correlations between different species in your survey:",
           p(),
           fluidRow(
             column(12, 
@@ -910,6 +976,116 @@ server <- function(input, output, session) {
         )
       }
     })
+    
+    # Overall capture rate map (all species combined)
+    output$overall_capture_map <- renderLeaflet({
+      
+      wide_obs <- results_store$data[["independent_total_observations"]] 
+      locs <- results_store$data[["camera_locations"]]
+      sp_list <- results_store$data[["species_list"]]$sp
+      
+      total_obs <- left_join(wide_obs, locs)
+      
+      # Calculate overall capture rate (sum of all species)
+      overall_cr <- total_obs %>% 
+        mutate(
+          total_detections = rowSums(select(., all_of(sp_list)), na.rm = TRUE),
+          CaptureRate = total_detections / (days / 100)
+        )
+      
+      # Calculate min and max for legend
+      max_cr <- max(overall_cr$CaptureRate, na.rm = TRUE)
+      min_cr <- min(overall_cr$CaptureRate, na.rm = TRUE)
+      mid_cr <- min_cr + ((max_cr - min_cr)/2)
+      
+      # Create custom HTML legend
+      legend_html <- paste0(
+        '<div style="padding: 10px; background: white; border: 2px solid grey; border-radius: 5px;">',
+        '<strong>All Species</strong><br>',
+        '<strong>Capture Rate</strong><br>(per 100 days)<br><br>',
+        '<svg width="120" height="80">',
+        '<circle cx="15" cy="15" r="11" fill="rgba(0, 102, 204, 0.6)" />',
+        '<text x="35" y="20" font-size="12">High: ', round(max_cr, 2), '</text>',
+        '<circle cx="15" cy="40" r="7" fill="rgba(0, 102, 204, 0.6)" />',
+        '<text x="35" y="45" font-size="12">Med: ', round(mid_cr, 2), '</text>',
+        '<circle cx="15" cy="65" r="3" fill="rgba(0, 102, 204, 0.6)" />',
+        '<text x="35" y="70" font-size="12">Low: ', round(min_cr, 2), '</text>',
+        '</svg>',
+        '</div>'
+      )
+      
+      leaflet() %>%
+        addProviderTiles(providers$Esri.WorldTopoMap) %>%
+        addCircleMarkers(
+          data = overall_cr,
+          lng = ~longitude,
+          lat = ~latitude,
+          radius = ~(CaptureRate / max(CaptureRate, na.rm = TRUE) * 10) + 1,
+          stroke = FALSE,
+          fillOpacity = 0.6,
+          popup = ~paste(placename, "<br>Total Detections:", total_detections, 
+                         "<br>Capture Rate:", round(CaptureRate, 2))
+        ) %>%   
+        addScaleBar(position = "topleft") %>%
+        addControl(html = legend_html, position = "bottomright")
+    })
+    
+    # Download overall map button 
+    output$download_overall_map_png <- downloadHandler(
+      filename = function() {
+        paste0("map_overall_", Sys.Date(), ".png")
+      },
+      content = function(file) {
+        
+        wide_obs <- results_store$data[["independent_total_observations"]] 
+        locs <- results_store$data[["camera_locations"]]
+        sp_list <- results_store$data[["species_list"]]$sp
+        
+        total_obs <- left_join(wide_obs, locs)
+        
+        overall_cr <- total_obs %>% 
+          mutate(
+            total_detections = rowSums(select(., all_of(sp_list)), na.rm = TRUE),
+            CaptureRate = total_detections / (days / 100)
+          )
+        
+        max_cr <- max(overall_cr$CaptureRate, na.rm = TRUE)
+        min_cr <- min(overall_cr$CaptureRate, na.rm = TRUE)
+        mid_cr <- min_cr + ((max_cr - min_cr)/2)
+        
+        legend_html <- paste0(
+          '<div style="padding: 10px; background: white; border: 2px solid grey; border-radius: 5px;">',
+          '<strong>All Species</strong><br>',
+          '<strong>Capture Rate</strong><br>(per 100 days)<br><br>',
+          '<svg width="120" height="80">',
+          '<circle cx="15" cy="15" r="11" fill="rgba(0, 102, 204, 0.6)" />',
+          '<text x="35" y="20" font-size="12">High: ', round(max_cr, 2), '</text>',
+          '<circle cx="15" cy="40" r="7" fill="rgba(0, 102, 204, 0.6)" />',
+          '<text x="35" y="45" font-size="12">Med: ', round(mid_cr, 2), '</text>',
+          '<circle cx="15" cy="65" r="3" fill="rgba(0, 102, 204, 0.6)" />',
+          '<text x="35" y="70" font-size="12">Low: ', round(min_cr, 2), '</text>',
+          '</svg>',
+          '</div>'
+        )
+        
+        m <- leaflet(options = leafletOptions(zoomControl = FALSE)) %>%
+          addProviderTiles(providers$Esri.WorldTopoMap) %>%
+          addCircleMarkers(
+            data = overall_cr,
+            lng = ~longitude,
+            lat = ~latitude,
+            radius = ~(CaptureRate / max(CaptureRate, na.rm = TRUE) * 10) + 1,
+            stroke = FALSE,
+            fillOpacity = 0.6
+          ) %>%  
+          addScaleBar(position = "topleft") %>%
+          addControl(html = legend_html, position = "bottomright")
+        
+        temp_html <- tempfile(fileext = ".html")
+        htmlwidgets::saveWidget(m, temp_html, selfcontained = TRUE)
+        webshot2::webshot(temp_html, file = file, vwidth = 1200, vheight = 800)
+      }
+    )
     
     
     output$capture_map <- renderLeaflet({
@@ -1037,7 +1213,6 @@ server <- function(input, output, session) {
                tl.col="black", tl.srt=45, #Text label color and rotation
                diag=FALSE)
     })
-    
     
     
     # Generate Word Report -------------------------------------------------------
@@ -1252,6 +1427,64 @@ server <- function(input, output, session) {
     
     
     # End of observeEvent(input$ind_run
+  })
+  
+  ## Glossary ------------------------------------------------------------------------
+  
+  
+  # Read glossary from Google Sheets
+  glossary_data <- reactive({
+    
+    # Use googlesheets4 to read the sheet
+    require(googlesheets4)
+    
+    # Make it public access (no authentication needed)
+    gs4_deauth()
+    
+    # Read the data
+    tryCatch({
+      read_sheet("https://docs.google.com/spreadsheets/d/1zY3-BS3u3LXj7apu8ybEzw2dgHDyuJyIVY-j4IYJBgY/edit?usp=sharing")
+    }, error = function(e) {
+      # Fallback data if Google Sheets fails
+      data.frame(
+        Term = c("Independent Detection", "Deployment", "Capture Rate"),
+        Definition = c(
+          "A detection event separated from the previous detection of the same species by a defined time threshold.",
+          "A period during which a camera trap was active at a specific location.",
+          "The number of independent detections per unit of survey effort (typically per 100 camera trap days)."
+        )
+      )
+    })
+  })
+  
+  
+  # Render the table
+  output$glossary_accordion <- renderUI({
+    
+    data <- glossary_data()
+    
+    # Filter based on search
+    if (!is.null(input$glossary_search) && input$glossary_search != "") {
+      search_term <- tolower(input$glossary_search)
+      data <- data %>%
+        filter(
+          grepl(search_term, tolower(Term)) | 
+            grepl(search_term, tolower(Definition))
+        )
+    }
+    
+    # Create accordion items
+    accordion_items <- lapply(1:nrow(data), function(i) {
+      box(
+        title = data$Term[i],
+        width = 12,
+        collapsible = TRUE,
+        collapsed = TRUE,
+        data$Definition[i]
+      )
+    })
+    
+    do.call(tagList, accordion_items)
   })
   
   

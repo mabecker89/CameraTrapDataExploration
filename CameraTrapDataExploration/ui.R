@@ -45,7 +45,7 @@ ui_welcome <- fluidRow(
     p(),
     "1. Use the tabs sequentially, as the output of a given tab typically depends on the tab previous to it.",
     p(),
-    "2. Your data must either be .zip files from the Wildlife Insights or WildTrax platforms, or a set of .csv files with the same names and formats as from those platforms. We have provided templates in this folder [LINK TBC]",
+    "2. Your data must either be .zip files from the Wildlife Insights, Migrations or WildTrax platforms, or a set of .csv files with the same names and formats as from those platforms. We have provided templates in this folder [LINK TBC]",
     p(),
     p(),
     "If you do not have any existing data, download an example dataset here: [LINK TBC].",
@@ -107,7 +107,7 @@ ui_custom_values <- fluidRow(
       p(),
       h3("We currently support either:"),
       tags$ul(
-        tags$li("raw data exports from the Wildlife Insights and WildTrax platforms (.zip files)"),
+        tags$li("raw data exports from the Wildlife Insights, WildTrax and Migrations platforms (.zip files)"),
         tags$li("single sheets which are formatted to match their formatting (see the [LINK XYZ] for template formats])"),
        ),
       p(),
@@ -202,7 +202,7 @@ ui_ind_detect <- fluidRow(
     checkboxInput("include_humans", "Include humans (Homo sapiens)", value = FALSE),
     
     p(),
-    "You first need to specify your inderpendance interval in decimal minutes (minimum = 0.01, max = 1000).",
+    "You first need to specify your independance interval in decimal minutes (minimum = 0.01, max = 1000).",
     p(),
     "Note: Most camera trappers use 30.",
     p(),
@@ -259,7 +259,7 @@ ui_temporal <- fluidRow(
   column(
     width = 12,
     titlePanel("Temporal trends"),
-    "The following plot shows you how many cameras you have active each month (top panel) and the total monthly capture rate (irrespective of species) on the bottom panel.",
+    "The following plots show how many cameras you have active over time (top panel) and the total capture rate irrespective of species (bottom panel).",
     p(),
     
     conditionalPanel(
@@ -273,7 +273,6 @@ ui_temporal <- fluidRow(
     uiOutput("temporal_plots_output")
   )
 )
-
 
 # Spatial maps of captures  ----------------------------------------------------------------------------------------------------------
 
@@ -317,8 +316,8 @@ ui_spatial_caps <- fluidRow(
   
   column(
     width = 12,
-    titlePanel("Species Capture Rate Map"),
-    "The following plot allows you to see where you accrued detections for each of your species classifications. Select from the drop down menu to vary the species.",
+    titlePanel("Capture Rate Maps"),
+    "The following plots allow you to see where you accrued camera detections. Select from the drop down menu to vary the species.",
     p(),
     
     conditionalPanel(
@@ -332,10 +331,27 @@ ui_spatial_caps <- fluidRow(
     uiOutput("spatial_plots_output")
   )
 )
+
+# ----------------------------------------------------------------------------------------------------------
+# Glossary
+
+ui_glossary <- fluidRow(
+  column(
+    width = 12,
+    titlePanel("Glossary"),
+    "Key terms and definitions used throughout the Camera Trap Data Exploration application.",
+    p(),
+    textInput("glossary_search", "Search terms:", placeholder = "Type to filter..."),
+    p(),
+    uiOutput("glossary_accordion")
+  )
+)
+
+
     
 # ----------------------------------------------------------------------------------------------------------
 
-# Then in the body, add:
+# Report
 tabItem(tabName = "report",
         fluidRow(
           column(12,
@@ -382,7 +398,7 @@ body <- dashboardBody(
     tabItem("capture", ui_capture),
     tabItem("temporal", ui_temporal),
     tabItem("spatial_capture", ui_spatial_caps),
-    tabItem("glossary"),
+    tabItem("glossary", ui_glossary),
     tabItem("report", ui_report)
   )
 )
