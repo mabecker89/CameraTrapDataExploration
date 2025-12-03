@@ -18,7 +18,7 @@ sidebar <- dashboardSidebar(
     # Initial data check
     menuItem("Data checking", tabName = "map", icon = icon("globe-americas")),
     # Analysis data creation
-    menuItem("Independent Detections", tabName = "ind_detect", icon=icon("fa-solid fa-computer")),
+    menuItem("Independent Detections", tabName = "ind_detect", icon=icon("desktop")),
     # Analysis data exploration
     menuItem("Analysis Data Exploration", icon = icon("wpexplorer"),
              menuSubItem("Detection summaries", tabName = "capture"),
