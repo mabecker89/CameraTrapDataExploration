@@ -35,9 +35,9 @@ sidebar <- dashboardSidebar(
 
 ui_welcome <- fluidRow(
   
-  # Map of camera locations
   column(
-    h2("Camera trap data exploration tool"), width = 12, style = "font-size: 130%",
+    width = 12,
+    h2("Camera trap data exploration tool", style = "font-size: 130%"),
     
     "This app represents a tool to explore annotated camera trap data in a quick and no-code way.",
     p(),
@@ -45,24 +45,40 @@ ui_welcome <- fluidRow(
     p(),
     "1. Use the tabs sequentially, as the output of a given tab typically depends on the tab previous to it.",
     p(),
-    "2. Your data must either be .zip files from the Wildlife Insights, Migrations or WildTrax platforms, or a set of .csv files with the same names and formats as from those platforms. We have provided templates in this folder [LINK TBC]",
+    "2. Your data files must be either:",
+    tags$ul(
+      tags$li("A .zip file exported directly from the Wildlife Insights, Migrations or WildTrax platforms, or"),
+      tags$li(HTML("A set of .csv files with the same names and formats as from those platforms. We have provided templates in <a href='https://drive.google.com/drive/folders/1ulLVZoxfunWIOrmNjXArtQmRaJVWpfD6?usp=sharing' target='_blank'>this folder</a>. It is essential the files names and at least the column headings shown are replicated (others can be present)."))
+    ),
     p(),
+    HTML("If you do not have any existing data but want to try the app, download an example dataset in Wildlife Insights format here: <a href='https://drive.google.com/file/d/1UQfGsWe4XWh3WOhL0mKsx0_i3wRMs8bC/view?usp=drive_link' target='_blank'> Wildlife Insights Example</a>."),
     p(),
-    "If you do not have any existing data, download an example dataset here: [LINK TBC].",
+    HTML("For feedback and feature requests, please post an issue at the <a href='https://github.com/mabecker89/CameraTrapDataExploration/issues' target='_blank'>projects github page</a>."),
     p(),
-    p(),
-    HTML("For feedback and feature requests, please post an issue at the <a href='https://github.com/mabecker89/CameraTrapDataExploration/issues'>projects github page</a>!"),
-    p(),
-    p(),
-    HTML("This creation of this tool has been supported by <a href='https://wildcams.ca/'>WildCAM</a> (Wildlife Cameras for Adaptive Management); 
-         the BC Government; the <a href='https://wildlife.forestry.ubc.ca/'>Wildlife Coexistence Lab at UBC</a> and NSERC."),
-    p(),
-    tags$img(src = "https://raw.githubusercontent.com/mabecker89/CameraTrapDataExploration/refs/heads/main/imgs/merged%20logos.png",
-         style = "max-width: 500px; height: auto;")
+    
+    # Acknowledgments section with custom styling
+    tags$div(
+      style = "background-color: white; padding: 20px; border-radius: 5px; border: 1px solid #ddd; margin-top: 20px;",
+      
+      HTML(paste0(
+        "This app has been authored by Christopher Beirne and Marcus Becker, based on the code in ",
+        "<a href='https://wildcolab.github.io/Introduction-to-Camera-Trap-Data-Management-and-Analysis-in-R/' target='_blank'>",
+        "An Introduction to Camera Trap Data Management and Analysis in R</a>."
+      )),
+      p(),
+      HTML(paste0(
+        "The creation of this tool has been supported by ",
+        "<a href='https://wildcams.ca/' target='_blank'>WildCAM</a> (Wildlife Cameras for Adaptive Management); ",
+        "the BC Government; the <a href='https://wildlife.forestry.ubc.ca/' target='_blank'>Wildlife Coexistence Lab at UBC</a>; and NSERC."
+      )),
+      p(),
+      tags$img(
+        src = "https://raw.githubusercontent.com/mabecker89/CameraTrapDataExploration/refs/heads/main/imgs/merged%20logos.png",
+        style = "max-width: 600px; height: auto;"
+      )
     )
-  
+  )
 )
-
 
 
 
@@ -197,7 +213,7 @@ ui_ind_detect <- fluidRow(
                                    "Birds" = "Aves",
                                    "Reptiles" = "Reptilia",
                                    "Amphibians" = "Amphibia"),
-                       selected = c("Mammalia")),  # Mammals selected by default
+                       selected = c("Mammalia", "Aves")),  # Mammals and birds selected by default
     
     checkboxInput("include_humans", "Include humans (Homo sapiens)", value = FALSE),
     
