@@ -1,20 +1,30 @@
 # Global
 
-packages <- c(
-  "tidyverse", "shiny", "shinydashboard", "htmltools",
-  "leaflet", "leaflet.extras", "sf", "waiter", "tools",
-  "readxl", "DT", "plotly", "stringr", "rlang", "viridis",
-  "patchwork", "corrplot", "zip", "mapview", "webshot2",
-  "officer", "flextable", "ggspatial", "prettymapr",
-  "googlesheets4", "ISOweek"
-)
-
-for (pkg in packages) {
-  if (!requireNamespace(pkg, quietly = TRUE)) {
-    install.packages(pkg)
-  }
-  library(pkg, character.only = TRUE)
-}
+library(tidyverse)
+library(shinydashboard)
+library(htmltools)
+library(leaflet)
+library(leaflet.extras)
+library(sf)
+library(waiter)
+library(tools)
+library(readxl)
+library(DT)
+library(plotly)
+library(stringr)
+library(rlang)
+library(viridis)
+library(patchwork)
+library(corrplot)
+library(zip)
+library(mapview)
+library(webshot2)
+library(officer)
+library(flextable)
+library(ggspatial)
+library(prettymapr)
+library(googlesheets4)
+library(ISOweek)
 
 # Set max file size to 100 MB
 options(shiny.maxRequestSize = 100 * 1024^2)
