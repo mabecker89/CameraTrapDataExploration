@@ -124,7 +124,7 @@ ui_custom_values <- fluidRow(
       h3("We currently support either:"),
       tags$ul(
         tags$li("raw data exports from the Wildlife Insights, WildTrax and Migrations platforms (.zip files)"),
-        tags$li("single sheets which are formatted to match their formatting (see the [LINK XYZ] for template formats])"),
+        tags$li(HTML("A set of .csv files with the same names and formats as from those platforms. We have provided templates in <a href='https://drive.google.com/drive/folders/1ulLVZoxfunWIOrmNjXArtQmRaJVWpfD6?usp=sharing' target='_blank'>this folder</a>. It is essential the files names and at least the column headings shown are replicated (others can be present)."))
        ),
       p(),
       "Uploaded data can be previewed using the dropdown list below.",

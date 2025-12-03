@@ -792,12 +792,31 @@ server <- function(input, output, session) {
       } else if (input$temporal_period == "week") {
         summary_data <- results_store$data[["independent_weekly_observations"]]
         
-        # Parse ISO week format (e.g., "2025-W15") to date
-        # Convert to the Monday of that week
-        summary_data$period <- ISOweek::ISOweek2date(paste0(summary_data$date, "-1"))
+        # Parse week format manually to avoid ISOweek validation issues
+        # Extract year and week from "YYYY-Wxx" format
+        week_parts <- strsplit(summary_data$date, "-W")
+        summary_data$year <- as.numeric(sapply(week_parts, `[`, 1))
+        summary_data$week <- as.numeric(sapply(week_parts, `[`, 2))
+        
+        # Validate and fix week numbers
+        summary_data$week <- pmin(summary_data$week, 53)  # Cap at 53
+        summary_data$week <- pmax(summary_data$week, 1)   # Floor at 1
+        
+        # Calculate date as: start of year + (week - 1) * 7 days
+        # Then adjust to the Monday of that week
+        summary_data$period <- as.Date(paste0(summary_data$year, "-01-01")) + 
+          (summary_data$week - 1) * 7
+        
+        # Adjust to Monday (ISO weeks start on Monday)
+        days_from_monday <- (as.numeric(format(summary_data$period, "%u")) - 1)
+        summary_data$period <- summary_data$period - days_from_monday
         
         # Create complete week sequence
-        date_range <- seq(min(summary_data$period), max(summary_data$period), by = "week")
+        date_range <- seq(
+          from = min(summary_data$period, na.rm = TRUE),
+          to = max(summary_data$period, na.rm = TRUE),
+          by = "week"
+        )
         complete_periods <- data.frame(period = date_range)
         
       } else {
@@ -814,7 +833,7 @@ server <- function(input, output, session) {
         group_by(period) %>%
         summarise(
           locs_active = n(),
-          cam_days = sum(days),
+          cam_days = sum(days, na.rm = TRUE),
           across(all_of(sp_list), sum, na.rm = TRUE),
           .groups = "drop"
         )
