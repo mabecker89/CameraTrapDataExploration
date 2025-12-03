@@ -47,7 +47,7 @@ ui_welcome <- fluidRow(
     p(),
     "2. Your data files must be either:",
     tags$ul(
-      tags$li("A .zip file exported directly from the Wildlife Insights, Migrations or WildTrax platforms, or"),
+      tags$li("Raw data exports directly from the Wildlife Insights, WildTrax, or Migrations platforms. This is usually a .zip file containing a set of csv files."),
       tags$li(HTML("A set of .csv files with the same names and formats as from those platforms. We have provided templates in <a href='https://drive.google.com/drive/folders/1ulLVZoxfunWIOrmNjXArtQmRaJVWpfD6?usp=sharing' target='_blank'>this folder</a>. It is essential the files names and at least the column headings shown are replicated (others can be present)."))
     ),
     p(),
@@ -123,9 +123,16 @@ ui_custom_values <- fluidRow(
       p(),
       h3("We currently support either:"),
       tags$ul(
-        tags$li("raw data exports from the Wildlife Insights, WildTrax and Migrations platforms (.zip files)"),
+        tags$li(HTML("Raw data exports from the <b>Wildlife Insights</b>, <b>WildTrax</b>, and <b>Migrations</b> platforms."),
+                tags$ul(
+                  tags$li("Note: This is usually a .zip file containing multiple csv files.")
+                )
+        ),
+        p(),
         tags$li(HTML("A set of .csv files with the same names and formats as from those platforms. We have provided templates in <a href='https://drive.google.com/drive/folders/1ulLVZoxfunWIOrmNjXArtQmRaJVWpfD6?usp=sharing' target='_blank'>this folder</a>. It is essential the files names and at least the column headings shown are replicated (others can be present)."))
        ),
+      p(),
+      HTML("If you are uploading WildTrax output, note that the <b>main report</b> is the essential file to use, and that it will be converted to Wildlife Insights equivalent (including column names)."),
       p(),
       "Uploaded data can be previewed using the dropdown list below.",
       p(),
@@ -218,16 +225,50 @@ ui_ind_detect <- fluidRow(
     checkboxInput("include_humans", "Include humans (Homo sapiens)", value = FALSE),
     
     p(),
-    "You first need to specify your independance interval in decimal minutes (minimum = 0.01, max = 1000).",
+    
+    # Independence threshold
+    
+    h3("Define independence threshold:"),
+    "Specify the time interval used to separate one independent detection from another.",
     p(),
-    "Note: Most camera trappers use 30.",
-    p(),
-    numericInput("ind_thresh", "Number of minutes:", 30, min = 0.01, max = 1000),
-    "You also need to select the column which specifies your count data (note - only numerical columns are available for selection)",
+    radioButtons(
+      "ind_units",
+      label = "Select time units:",
+      choices = c("Seconds" = "sec",
+                  "Minutes" = "min",
+                  "Hours" = "hr"),
+      inline = TRUE,
+      selected = "min"
+    ),
+    numericInput(
+      "ind_thresh",
+      "Number of time units:",
+      value = 30,
+      min = 0.01,
+      max = 1000
+    ),
+    helpText("Note: Most camera trappers use 30 minutes."),
     p(),
     
+    "You also need to select the column which specifies your count data (note - only numerical columns are available for selection)",
+    p(),
     # Select the "count" column. Only give the user numeric inputs as an option
     selectInput("ind_count", "Choose a animal count column:", choices = NULL),
+    
+    # Analysis data options
+    h3("Select output datasets:"),
+    checkboxGroupInput(
+      "analysis_frames",
+      label = "Independent detection summaries:",
+      choices = c(
+        "Total" = "total",
+        "Monthly" = "monthly",
+        "Weekly" = "weekly",
+        "Daily" = "daily"
+      ),
+      selected = c("total", "monthly", "weekly", "daily")
+    ),
+    p(),
     
     # Make a button to run the independent detections
     p(),

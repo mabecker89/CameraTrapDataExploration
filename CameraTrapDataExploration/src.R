@@ -10,12 +10,17 @@
 #' @param count_column Desired count column (character)
 #' @param include_classes The genus of species you want to include
 #' @param include_humans TRUE/FALSE whether humans are included
+#' @param summaries The summaries requested by the user
 #'
 #' @import dplyr tidyr lubridate stringr rlang
 #' @export
 create_ind_detect <- function(deployments, images, threshold, count_column, 
                                   include_classes = c("Mammalia"), 
-                                  include_humans = FALSE) {
+                                  include_humans = FALSE,
+                              summaries = c("total", "monthly",
+                                            "weekly", "daily")) {
+  
+  summaries <- intersect(summaries, c("total", "monthly", "weekly", "daily"))
   
   # Build the filter
   images <- images |>
@@ -124,6 +129,8 @@ create_ind_detect <- function(deployments, images, threshold, count_column,
   
   # Site × Species totals (days + obs / counts)
   # Total days by site (from effort)
+  if ("total" %in% summaries) {
+  
   total_obs_base <- row_lookup |>
     group_by(placename) |>
     summarise(days = n(), .groups = "drop")
@@ -162,8 +169,13 @@ create_ind_detect <- function(deployments, images, threshold, count_column,
   results[["independent_total_observations"]] <- total_obs
   results[["independent_total_counts"]]      <- total_count
   
+  }
+  
   # Monthly counts (obs & counts) 
   # Effort per site-month
+  
+  if ("monthly" %in% summaries) {
+  
   mon_obs_base <- row_lookup |>
     mutate(date = as.Date(date),
            month = format(date, "%Y-%m")) |>
@@ -206,8 +218,13 @@ create_ind_detect <- function(deployments, images, threshold, count_column,
   results[["independent_monthly_observations"]] <- mon_obs
   results[["independent_monthly_counts"]]      <- mon_count
   
+  }
+  
   # Weekly counts (obs & counts) 
   # Effort per site-week (YYYY-W##)
+  
+  if ("weekly" %in% summaries) {
+  
   week_obs_base <- row_lookup |>
     mutate(date = as.Date(date),
            week = strftime(date, format = "%Y-W%U"),
@@ -254,7 +271,12 @@ create_ind_detect <- function(deployments, images, threshold, count_column,
   results[["independent_weekly_observations"]] <- week_obs
   results[["independent_weekly_counts"]]      <- week_count
   
+  }
+  
   # Daily counts (obs & counts)
+  
+  if ("daily" %in% summaries) {
+  
   day_obs_base <- row_lookup |>
     mutate(date = as.Date(date), days = 1L) |>
     arrange(placename, date)
@@ -307,6 +329,8 @@ create_ind_detect <- function(deployments, images, threshold, count_column,
   
   results[["independent_daily_observations"]] <- day_obs
   results[["independent_daily_counts"]]      <- day_count
+  
+  }
   
   # Return results
   

@@ -102,8 +102,13 @@ server <- function(input, output, session) {
     if (any(str_detect(names(dfs), "main_report.csv$"))) {
       
       # Find name that ends in "main_report.csv"
-      idx <- grep("main_report.csv$", names(dfs))
-      names(dfs)[idx] <- "main_report.csv"
+      mr_idx <- grep("main_report.csv$", names(dfs))
+      if (length(mr_idx) > 1) {
+        dfs[["main_report.csv"]] <- dplyr::bind_rows(dfs[mr_idx])
+        dfs <- dfs[-mr_idx[-1]]  # drop all but the first
+      } else {
+        names(dfs)[mr_idx] <- "main_report.csv"
+      }
       
       # Create deployments.csv
       dfs[["deployments.csv"]] <- dfs[["main_report.csv"]] |>
@@ -146,9 +151,14 @@ server <- function(input, output, session) {
                sex = sex_class,
                family, genus, order)
       
-      # Remove main_report.csv
-      dfs <- dfs[!grepl("main_report.csv$", names(dfs))]
-    }
+      # Remove all the other report types
+      reps <- c("main", "abstract", "image_report",
+                "image_set", "location", "megadetector",
+                "project", "tag", "definitions")
+      
+      dfs <- dfs[!str_detect(names(dfs), str_c(reps, collapse = "|"))]
+    
+      }
     
     # WildCo/Migrations format - check for stations.csv AND tags.csv
     if (all(c("stations.csv", "tags.csv") %in% names(dfs))) {
@@ -513,12 +523,25 @@ server <- function(input, output, session) {
     # Ensure data exists
     req(length(data_store$dfs) > 0)
     
+    # Convert threshold from chosen units to minutes
+    unit_mult <- switch(input$ind_units,
+                        sec = 1/60,
+                        min = 1,
+                        hr  = 60)
+    
+    thresh_minutes <- input$ind_thresh * unit_mult
+    
     results <- create_ind_detect(deployments = data_store$dfs[["deployments.csv"]],
                                  images = data_store$dfs[["images.csv"]],
-                                 threshold = input$ind_thresh,
+                                 threshold = thresh_minutes,   
                                  count_column = input$ind_count,
-                                 include_classes = input$taxa_include,  # Add this
-                                 include_humans = input$include_humans)  # Add this
+                                 include_classes = input$taxa_include,
+                                 include_humans = input$include_humans,
+                                 summaries = input$analysis_frames)
+    
+    # Subset results based on selected analysis frames
+    frames <- input$analysis_frames
+    if (is.null(frames)) frames <- character(0)
     
     # Store results in reactive value so they are accessible later!
     results_store$data <- results
@@ -567,7 +590,17 @@ server <- function(input, output, session) {
     # Download a zipfile of the formatted data
     output$download_results <- downloadHandler(
       filename = function() {
-        paste0("ind_data_",  input$ind_thresh,"_mins_", format(Sys.Date(), "%Y%m%d"), ".zip")
+        
+        unit_mult <- switch(input$ind_units,
+                            sec = 1/60,
+                            min = 1,
+                            hr  = 60)
+        
+        thresh_minutes <- input$ind_thresh * unit_mult
+        
+        paste0("ind_data_",  round(thresh_minutes, 2), "_mins_",
+               format(Sys.Date(), "%Y%m%d"), ".zip")
+        
       },
       content = function(file) {
         req(results_store$data)
