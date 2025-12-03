@@ -697,6 +697,12 @@ server <- function(input, output, session) {
       )
     })
     
+    # Reset filters button
+    observeEvent(input$reset_filters, {
+      updateNumericInput(session, "min_detections", value = 0)
+      updateNumericInput(session, "max_detections", value = NA)
+    })
+    
     # Set up the error message if the independent data doesnt exist
     output$capture_summary_output <- renderUI({
       if (!results_ready()) {
@@ -707,6 +713,38 @@ server <- function(input, output, session) {
       } else {
         tagList(
           uiOutput("summary_stats"),
+          # Add filter controls
+          fluidRow(
+            column(12,
+                   box(
+                     width = 12,
+                     title = "Filter Species by Detection Count",
+                     collapsible = TRUE,
+                     collapsed = FALSE,
+                     fluidRow(
+                       column(4,
+                              numericInput("min_detections", 
+                                           "Minimum Detections:", 
+                                           value = 0, 
+                                           min = 0, 
+                                           step = 1)
+                       ),
+                       column(4,
+                              numericInput("max_detections", 
+                                           "Maximum Detections:", 
+                                           value = NA, 
+                                           min = 1, 
+                                           step = 1)
+                       ),
+                       column(4,
+                              br(),
+                              actionButton("reset_filters", "Reset Filters", 
+                                           icon = icon("undo"))
+                       )
+                     )
+                   )
+            )
+          ),
           plotlyOutput(outputId = "capture_summary", height = "auto")
         )
       }
@@ -742,31 +780,51 @@ server <- function(input, output, session) {
         summarise(occupancy=sum(count)/nrow(results_store$data[["camera_locations"]]))
       
       sp_summary <- left_join(sp_summary, tmp)
+      
+      # Apply filters
+      min_det <- if(is.null(input$min_detections)) 0 else input$min_detections
+      max_det <- if(is.null(input$max_detections) || is.na(input$max_detections)) {
+        Inf
+      } else {
+        input$max_detections
+      }
+      
+      sp_summary <- sp_summary %>%
+        filter(count >= min_det & count <= max_det)
+      
+      # Check if any species remain after filtering
+      validate(
+        need(nrow(sp_summary) > 0, 
+             "No species match the current filter criteria. Please adjust the min/max values.")
+      )
+      
       sp_summary <- sp_summary[order(sp_summary$count),]
+      
+      # Calculate plot height
+      plot_height <- max(400, nrow(sp_summary) * 20)
       
       yform <- list(categoryorder = "array", categoryarray = sp_summary$sp)
       xform <- list(title="Independent detections")
       
-      fig1 <- plot_ly(x = sp_summary$count, y = sp_summary$sp, type = 'bar', orientation = 'h', name="count") %>% 
-        layout(yaxis = yform, xaxis=xform, height=nrow(sp_summary)*20)  %>%
+      fig1 <- plot_ly(x = sp_summary$count, y = sp_summary$sp, 
+                      type = 'bar', orientation = 'h', name="count",
+                      height = plot_height) %>% 
+        layout(yaxis = yform, xaxis=xform) %>%
         config(displayModeBar = TRUE,
                modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
       
       yform <- list(categoryorder = "array", categoryarray = sp_summary$sp, showticklabels=F)
       xform <- list(title="Proportion of stations detected")
       
-      fig2 <- plot_ly(x = sp_summary$occupancy, y = sp_summary$sp, type = 'bar', orientation = 'h', name="occupancy") %>% 
+      fig2 <- plot_ly(x = sp_summary$occupancy, y = sp_summary$sp, 
+                      type = 'bar', orientation = 'h', name="occupancy",
+                      height = plot_height) %>% 
         layout(yaxis = yform, xaxis=xform) %>%
         config(displayModeBar = TRUE,
                modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
       
-      
-      subplot(nrows=1, fig1, fig2, titleX = T) %>%
-        layout(height = max(400, nrow(sp_summary) * 20))
-    }) 
-    
-    
-    
+      subplot(nrows=1, fig1, fig2, titleX = T)
+    })
     #############################
     # Temporal patterns -----------------------------------------------------------    
     # Code to show error message before independent data is created

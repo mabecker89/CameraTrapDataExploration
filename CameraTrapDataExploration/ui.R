@@ -288,6 +288,7 @@ ui_ind_detect <- fluidRow(
 
 # Detection summaries ----------------------------------------------------------------------------------------------------------
 
+
 ui_capture <- fluidRow(
   
   # Detection summaries
