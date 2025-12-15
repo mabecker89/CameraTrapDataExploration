@@ -224,7 +224,8 @@ server <- function(input, output, session) {
             species = tolower(species_taxo),
             common_name = common_names,
             is_blank = 0L,
-            sp = paste0(genus_taxo, ".", species_taxo),
+            # Note I have added a gsub as sometime there is whitespace in the species name 
+            sp = gsub("\\s+", "", paste0(genus_taxo, ".", species_taxo)),
             number_of_objects = coalesce(as.numeric(species_count), 1),
             image_date = as.Date(timestamp)
           ) |>
