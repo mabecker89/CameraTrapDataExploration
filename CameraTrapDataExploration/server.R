@@ -230,8 +230,6 @@ server <- function(input, output, session) {
           )
         
         # EFFICIENT DEPLOYMENT ASSIGNMENT using data.table
-        require(data.table)
-        
         # Convert to data.table
         images_dt <- as.data.table(images_processed)
         deployments_dt <- as.data.table(deployments_df)

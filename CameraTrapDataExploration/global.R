@@ -25,6 +25,7 @@ library(ggspatial)
 library(prettymapr)
 library(googlesheets4)
 library(ISOweek)
+library(data.table)
 
 # Set max file size to 100 MB
 options(shiny.maxRequestSize = 100 * 1024^2)
