@@ -209,8 +209,8 @@ server <- function(input, output, session) {
           select(-any_of(c("_id", "species"))) |>
           left_join(species, by = "species_id")
         
-        # Create images.csv - with proper deployment assignment and no warnings
-        dfs[["images.csv"]] <- images_raw |>
+        # Create images with basic info first
+        images_processed <- images_raw |>
           left_join(tags_processed, by = c("_id" = "image_id")) |>
           filter(!is.na(species_id)) |>
           mutate(
@@ -224,39 +224,61 @@ server <- function(input, output, session) {
             species = tolower(species_taxo),
             common_name = common_names,
             is_blank = 0L,
-            # Note I have added a gsub as sometime there is whitespace in the species name 
             sp = gsub("\\s+", "", paste0(genus_taxo, ".", species_taxo)),
             number_of_objects = coalesce(as.numeric(species_count), 1),
             image_date = as.Date(timestamp)
-          ) |>
-          # Join with all deployments for each station
-          left_join(
-            deployments_df |> select(placename, deployment_id, start_date, end_date),
-            by = "placename",
-            relationship = "many-to-many"
-          ) |>
-          # Assign deployment based on rules
-          group_by(placename, timestamp) |>
-          mutate(
-            within_period = image_date >= start_date & image_date <= end_date,
-            before_first = image_date < min(start_date),
-            is_first_deployment = start_date == min(start_date),
-            after_deployment = image_date > end_date,
-            days_after = if_else(after_deployment, as.numeric(image_date - end_date), Inf),
-            # Find if this is the closest past deployment
-            min_days_after = if_else(
-              any(after_deployment), 
-              min(days_after[after_deployment], na.rm = TRUE), 
-              Inf
-            ),
-            is_closest_past = after_deployment & (days_after == min_days_after)
-          ) |>
-          filter(
-            within_period |  # Image within deployment period
-              (before_first & is_first_deployment) |  # Before first deployment
-              (sum(within_period) == 0 & is_closest_past)  # After deployment - closest past one
-          ) |>
-          ungroup() |>
+          )
+        
+        # EFFICIENT DEPLOYMENT ASSIGNMENT using data.table
+        require(data.table)
+        
+        # Convert to data.table
+        images_dt <- as.data.table(images_processed)
+        deployments_dt <- as.data.table(deployments_df)
+        
+        # For each station, assign deployments efficiently
+        result_list <- list()
+        
+        for(station in unique(images_dt$placename)) {
+          # Get images and deployments for this station
+          station_images <- images_dt[placename == station]
+          station_deps <- deployments_dt[placename == station][order(start_date)]
+          
+          if(nrow(station_deps) == 0) next
+          
+          # Assign deployment_id to each image
+          station_images[, deployment_id := {
+            sapply(image_date, function(img_date) {
+              # Check if within any deployment period
+              within <- which(img_date >= station_deps$start_date & img_date <= station_deps$end_date)
+              if(length(within) > 0) {
+                return(station_deps$deployment_id[within[1]])
+              }
+              
+              # Before first deployment
+              if(img_date < station_deps$start_date[1]) {
+                return(station_deps$deployment_id[1])
+              }
+              
+              # After a deployment - find most recent
+              past <- which(station_deps$end_date < img_date)
+              if(length(past) > 0) {
+                return(station_deps$deployment_id[max(past)])
+              }
+              
+              # Fallback
+              return(station_deps$deployment_id[1])
+            })
+          }]
+          
+          result_list[[station]] <- station_images
+        }
+        
+        # Combine all stations
+        matched <- rbindlist(result_list)
+        
+        # Convert back to dataframe and clean up
+        dfs[["images.csv"]] <- as.data.frame(matched) |>
           select(
             project_id,
             deployment_id,
