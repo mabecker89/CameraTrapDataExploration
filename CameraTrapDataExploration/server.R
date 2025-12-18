@@ -19,307 +19,364 @@ server <- function(input, output, session) {
     # Ensure files exist
     req(input$files)
     
-    # List to store dataframes
-    dfs <- list()
-    
-    # Iterate through uploaded files
-    for (i in seq_along(input$files$datapath)) {
-      file_path <- input$files$datapath[i]
-      file_name <- input$files$name[i]
+    # Show progress bar
+    withProgress(message = 'Processing files', value = 0, {
       
-      if (grepl("\\.csv$", file_name, ignore.case = TRUE)) {
-        
-        # Directly read CSV file
-        dfs[[file_name]] <- read_csv(file_path)
-        
-      } else if (grepl("\\.zip$", file_name, ignore.case = TRUE)) {
-        
-        # Unzip to a temporary directory
-        temp_dir <- file.path(tempdir(), paste0("unzipped_", i))
-        dir.create(temp_dir, showWarnings = FALSE)
-        unzip(file_path, exdir = temp_dir)
-        
-        # List extracted files
-        all_extracted <- list.files(temp_dir, full.names = TRUE, recursive = TRUE)
-        
-        # Filter for CSV files
-        csv_files <- list.files(temp_dir, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)
-        
-        if (length(csv_files) == 0) {
-          message("No CSV files found in ZIP.")
-        }
-        
-        # Read all extracted CSVs
-        for (csv in csv_files) {
-          dfs[[basename(csv)]] <- read_csv(csv)
-        }
-      }
-    }
-    
-    # Merge all of the image files included into a single csv
-    # BUT ONLY for Wildlife Insights (which has multiple images_*.csv files)
-    images_data <- lapply(names(dfs)[grepl("^images_[0-9]", names(dfs))], function(name) dfs[[name]])
-    
-    if (length(images_data) > 0) {
-      # Only merge if images.csv doesn't already exist (Wildlife Insights format)
-      if (!"images.csv" %in% names(dfs)) {
-        dfs[["images.csv"]] <- bind_rows(images_data)
-      }
-      # Remove the numbered files (images_1.csv, images_2.csv, etc.)
-      dfs <- dfs[!grepl("^images_[0-9]", names(dfs))]
-    }
-    
-    # HOUSEKEEPING - process based on which files are present
-    
-    # Wildlife Insights format - check for images.csv AND deployments.csv (but NOT WildCo files)
-    if (all(c("images.csv", "deployments.csv") %in% names(dfs)) &&
-        !all(c("stations.csv", "tags.csv") %in% names(dfs)) &&
-        !any(str_detect(names(dfs), "main_report.csv$"))) {
+      # List to store dataframes
+      dfs <- list()
       
-      #Update the project ID column
-      dfs[["deployments.csv"]]$project_id <- dfs[["projects.csv"]]$project_name[1] 
+      incProgress(0.1, detail = "Reading uploaded files...")
       
-      # Format appropriate dates and create a species column
-      dfs[["images.csv"]]$sp <- paste0(dfs[["images.csv"]]$genus, ".", dfs[["images.csv"]]$species)
-      dfs[["images.csv"]]$timestamp <- ymd_hms(dfs[["images.csv"]]$timestamp)
-      
-      dfs[["deployments.csv"]]$start_date <- ymd(dfs[["deployments.csv"]]$start_date)
-      dfs[["deployments.csv"]]$end_date <- ymd(dfs[["deployments.csv"]]$end_date)
-      dfs[["deployments.csv"]]$days <- interval(
-        dfs[["deployments.csv"]]$start_date,
-        dfs[["deployments.csv"]]$end_date
-      ) / ddays(1)
-      
-      # Join deployment info to images
-      dfs[["images.csv"]] <- left_join(
-        dfs[["images.csv"]],
-        dfs[["deployments.csv"]][, c("deployment_id", "placename")],
-        by = "deployment_id"
-      )
-    }
-    
-    # WildTrax format - check for main_report.csv
-    if (any(str_detect(names(dfs), "main_report.csv$"))) {
-      
-      # Find name that ends in "main_report.csv"
-      mr_idx <- grep("main_report.csv$", names(dfs))
-      if (length(mr_idx) > 1) {
-        dfs[["main_report.csv"]] <- dplyr::bind_rows(dfs[mr_idx])
-        dfs <- dfs[-mr_idx[-1]]  # drop all but the first
-      } else {
-        names(dfs)[mr_idx] <- "main_report.csv"
-      }
-      
-      # Create deployments.csv
-      dfs[["deployments.csv"]] <- dfs[["main_report.csv"]] |>
-        group_by(project_id, location, latitude, longitude) |>
-        summarise(start_date = min(as.Date(image_date_time)),
-                  end_date = max(as.Date(image_date_time))) |>
-        mutate(deployment_id = paste0(location),
-               feature_type = "") |>
-        select(project_id, deployment_id, placename = location, longitude, latitude, start_date, end_date, feature_type) |>
-        ungroup() |>
-        mutate(days = interval(start_date, end_date) / ddays(1))
-      
-      # Create images.csv
-      dfs[["images.csv"]] <- dfs[["main_report.csv"]] |>
-        filter(!species_common_name %in% c("STAFF/SETUP", "Human"),
-               !individual_count == "VNA") |>
-        group_by(image_date_time) |>
-        filter(row_number() == 1) |>
-        ungroup() |>
-        mutate(is_blank = ifelse(species_common_name == "NONE", 1, 0),
-               class = "Mammalia",
-               family = "",
-               genus = "",
-               order = "",
-               sp = str_replace_all(species_common_name, " |, ", "."),
-               individual_count = as.numeric(individual_count),
-               placename = location,
-               common_name = species_common_name) |>
-        select(project_id,
-               deployment_id = location,
-               placename,
-               is_blank,
-               class,
-               species = species_common_name,
-               common_name,
-               sp,
-               timestamp = image_date_time,
-               number_of_objects = individual_count,
-               age = age_class,
-               sex = sex_class,
-               family, genus, order)
-      
-      # Remove all the other report types
-      reps <- c("main", "abstract", "image_report",
-                "image_set", "location", "megadetector",
-                "project", "tag", "definitions")
-      
-      dfs <- dfs[!str_detect(names(dfs), str_c(reps, collapse = "|"))]
-    
-      }
-    
-    # WildCo/Migrations format - check for stations.csv AND tags.csv
-    if (all(c("stations.csv", "tags.csv") %in% names(dfs))) {
-      
-      tryCatch({
+      # Iterate through uploaded files
+      for (i in seq_along(input$files$datapath)) {
+        file_path <- input$files$datapath[i]
+        file_name <- input$files$name[i]
         
-        # Rename the raw images file to avoid overwriting it
-        if("images.csv" %in% names(dfs)) {
-          dfs[["images_raw.csv"]] <- dfs[["images.csv"]]
-          dfs[["images.csv"]] <- NULL
-        }
-        
-        # Read the data
-        camera_checks <- dfs[["camera_checks.csv"]]
-        stations <- dfs[["stations.csv"]]
-        images_raw <- dfs[["images_raw.csv"]]
-        tags <- dfs[["tags.csv"]]
-        species <- dfs[["species.csv"]]
-        
-        # Create deployments.csv
-        deployments_df <- camera_checks |>
-          left_join(stations, by = c("station_id", "project_id")) |>
-          rename(placename = station_id, feature_type = feature) |>
-          mutate(
-            project_id = as.character(project_id),
-            start_date = ymd(substr(check_date, 1, 10)),
-            end_date = ymd(substr(stop_date, 1, 10)),
-            days = as.numeric(difftime(end_date, start_date, units = "days")),
-            deployment_id = paste0(placename, "_", start_date)
-          ) |>
-          select(
-            project_id,
-            deployment_id,
-            placename,
-            longitude,
-            latitude,
-            start_date,
-            end_date,
-            feature_type,
-            days
-          ) |>
-          arrange(placename, start_date)
-        
-        dfs[["deployments.csv"]] <- deployments_df
-        
-        # Process tags
-        tags_processed <- tags |>
-          select(-any_of(c("_id", "species"))) |>
-          left_join(species, by = "species_id")
-        
-        # Create images with basic info first
-        images_processed <- images_raw |>
-          left_join(tags_processed, by = c("_id" = "image_id")) |>
-          filter(!is.na(species_id)) |>
-          mutate(
-            project_id = as.character(project_id),
-            placename = station_id,
-            timestamp = ymd_hms(exif_timestamp),
-            class = "Mammalia",
-            order = tolower(order_taxo),
-            family = tolower(family_taxo),
-            genus = tolower(genus_taxo),
-            species = tolower(species_taxo),
-            common_name = common_names,
-            is_blank = 0L,
-            sp = gsub("\\s+", "", paste0(genus_taxo, ".", species_taxo)),
-            number_of_objects = coalesce(as.numeric(species_count), 1),
-            image_date = as.Date(timestamp)
-          )
-        
-        # EFFICIENT DEPLOYMENT ASSIGNMENT using data.table
-        # Convert to data.table
-        images_dt <- as.data.table(images_processed)
-        deployments_dt <- as.data.table(deployments_df)
-        
-        # For each station, assign deployments efficiently
-        result_list <- list()
-        
-        for(station in unique(images_dt$placename)) {
-          # Get images and deployments for this station
-          station_images <- images_dt[placename == station]
-          station_deps <- deployments_dt[placename == station][order(start_date)]
+        if (grepl("\\.csv$", file_name, ignore.case = TRUE)) {
+          dfs[[file_name]] <- read_csv(file_path, show_col_types = FALSE)
+        } else if (grepl("\\.zip$", file_name, ignore.case = TRUE)) {
+          temp_dir <- file.path(tempdir(), paste0("unzipped_", i))
+          dir.create(temp_dir, showWarnings = FALSE)
+          unzip(file_path, exdir = temp_dir)
           
-          if(nrow(station_deps) == 0) next
+          csv_files <- list.files(temp_dir, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)
           
-          # Assign deployment_id to each image
-          station_images[, deployment_id := {
-            sapply(image_date, function(img_date) {
-              # Check if within any deployment period
-              within <- which(img_date >= station_deps$start_date & img_date <= station_deps$end_date)
-              if(length(within) > 0) {
-                return(station_deps$deployment_id[within[1]])
-              }
-              
-              # Before first deployment
-              if(img_date < station_deps$start_date[1]) {
-                return(station_deps$deployment_id[1])
-              }
-              
-              # After a deployment - find most recent
-              past <- which(station_deps$end_date < img_date)
-              if(length(past) > 0) {
-                return(station_deps$deployment_id[max(past)])
-              }
-              
-              # Fallback
-              return(station_deps$deployment_id[1])
-            })
-          }]
+          if (length(csv_files) == 0) {
+            message("No CSV files found in ZIP.")
+          }
           
-          result_list[[station]] <- station_images
+          for (csv in csv_files) {
+            dfs[[basename(csv)]] <- read_csv(csv, show_col_types = FALSE)
+          }
+        }
+      }
+      
+      incProgress(0.2, detail = "Merging image files...")
+      
+      # Merge Wildlife Insights image files
+      images_data <- lapply(names(dfs)[grepl("^images_[0-9]", names(dfs))], function(name) dfs[[name]])
+      
+      if (length(images_data) > 0) {
+        if (!"images.csv" %in% names(dfs)) {
+          dfs[["images.csv"]] <- bind_rows(images_data)
+        }
+        dfs <- dfs[!grepl("^images_[0-9]", names(dfs))]
+      }
+      
+      incProgress(0.3, detail = "Detecting data format...")
+      
+      # HOUSEKEEPING - process based on which files are present
+      
+      # Wildlife Insights format
+      if (all(c("images.csv", "deployments.csv") %in% names(dfs)) &&
+          !all(c("stations.csv", "tags.csv") %in% names(dfs)) &&
+          !any(str_detect(names(dfs), "main_report.csv$"))) {
+        
+        incProgress(0.1, detail = "Processing Wildlife Insights format...")
+        
+        dfs[["deployments.csv"]]$project_id <- dfs[["projects.csv"]]$project_name[1] 
+        dfs[["images.csv"]]$sp <- paste0(dfs[["images.csv"]]$genus, ".", dfs[["images.csv"]]$species)
+        dfs[["images.csv"]]$timestamp <- ymd_hms(dfs[["images.csv"]]$timestamp)
+        
+        dfs[["deployments.csv"]]$start_date <- ymd(dfs[["deployments.csv"]]$start_date)
+        dfs[["deployments.csv"]]$end_date <- ymd(dfs[["deployments.csv"]]$end_date)
+        dfs[["deployments.csv"]]$days <- interval(
+          dfs[["deployments.csv"]]$start_date,
+          dfs[["deployments.csv"]]$end_date
+        ) / ddays(1)
+        
+        dfs[["images.csv"]] <- left_join(
+          dfs[["images.csv"]],
+          dfs[["deployments.csv"]][, c("deployment_id", "placename")],
+          by = "deployment_id"
+        )
+        
+        incProgress(0.3, detail = "Wildlife Insights processing complete!")
+      }
+      
+      # WildTrax format
+      if (any(str_detect(names(dfs), "main_report.csv$"))) {
+        
+        incProgress(0.1, detail = "Processing WildTrax format...")
+        
+        mr_idx <- grep("main_report.csv$", names(dfs))
+        if (length(mr_idx) > 1) {
+          dfs[["main_report.csv"]] <- dplyr::bind_rows(dfs[mr_idx])
+          dfs <- dfs[-mr_idx[-1]]
+        } else {
+          names(dfs)[mr_idx] <- "main_report.csv"
         }
         
-        # Combine all stations
-        matched <- rbindlist(result_list)
+        incProgress(0.1, detail = "Creating deployments...")
         
-        # Convert back to dataframe and clean up
-        dfs[["images.csv"]] <- as.data.frame(matched) |>
-          select(
-            project_id,
-            deployment_id,
-            placename,
-            is_blank,
-            class,
-            order,
-            family,
-            genus,
-            species,
-            common_name,
-            sp,
-            timestamp,
-            number_of_objects,
-            age = age_category,
-            sex = sex
-          )
+        dfs[["deployments.csv"]] <- dfs[["main_report.csv"]] |>
+          group_by(project_id, location, latitude, longitude) |>
+          summarise(start_date = min(as.Date(image_date_time)),
+                    end_date = max(as.Date(image_date_time))) |>
+          mutate(deployment_id = paste0(location),
+                 feature_type = "") |>
+          select(project_id, deployment_id, placename = location, longitude, latitude, start_date, end_date, feature_type) |>
+          ungroup() |>
+          mutate(days = interval(start_date, end_date) / ddays(1))
         
-        message("WildCo processing complete!")
+        incProgress(0.1, detail = "Processing images...")
         
-        # Remove the original WildCo files from dfs
-        wildco_files <- c("camera_checks.csv", "stations.csv", "tags.csv", "species.csv", "images_raw.csv")
-        dfs <- dfs[!names(dfs) %in% wildco_files]
+        dfs[["images.csv"]] <- dfs[["main_report.csv"]] |>
+          filter(!species_common_name %in% c("STAFF/SETUP", "Human"),
+                 !individual_count == "VNA") |>
+          group_by(image_date_time) |>
+          filter(row_number() == 1) |>
+          ungroup() |>
+          mutate(is_blank = ifelse(species_common_name == "NONE", 1, 0),
+                 class = "Mammalia",
+                 family = "",
+                 genus = "",
+                 order = "",
+                 sp = str_replace_all(species_common_name, " |, ", "."),
+                 individual_count = as.numeric(individual_count),
+                 placename = location,
+                 common_name = species_common_name) |>
+          select(project_id,
+                 deployment_id = location,
+                 placename,
+                 is_blank,
+                 class,
+                 species = species_common_name,
+                 common_name,
+                 sp,
+                 timestamp = image_date_time,
+                 number_of_objects = individual_count,
+                 age = age_class,
+                 sex = sex_class,
+                 family, genus, order)
         
-      }, error = function(e) {
-        message("WildCo processing error: ", e$message)
-        print(e)
-        showNotification(paste("Error processing WildCo data:", e$message), 
-                         type = "error", duration = NULL)
+        reps <- c("main", "abstract", "image_report",
+                  "image_set", "location", "megadetector",
+                  "project", "tag", "definitions")
+        
+        dfs <- dfs[!str_detect(names(dfs), str_c(reps, collapse = "|"))]
+        
+        incProgress(0.1, detail = "WildTrax processing complete!")
+      }
+      
+      # WildCo/Migrations format
+      if (all(c("stations.csv", "tags.csv") %in% names(dfs))) {
+        
+        incProgress(0.1, detail = "Processing Migrations format...")
+        
+        tryCatch({
+          
+          if("images.csv" %in% names(dfs)) {
+            dfs[["images_raw.csv"]] <- dfs[["images.csv"]]
+            dfs[["images.csv"]] <- NULL
+          }
+          
+          camera_checks <- dfs[["camera_checks.csv"]]
+          stations <- dfs[["stations.csv"]]
+          images_raw <- dfs[["images_raw.csv"]]
+          tags <- dfs[["tags.csv"]]
+          species <- dfs[["species.csv"]]
+          
+          incProgress(0.05, detail = "Creating deployments...")
+          
+          deployments_df <- camera_checks |>
+            left_join(stations, by = c("station_id", "project_id")) |>
+            rename(placename = station_id, feature_type = feature) |>
+            mutate(
+              project_id = as.character(project_id),
+              start_date = ymd(substr(check_date, 1, 10)),
+              end_date = ymd(substr(stop_date, 1, 10)),
+              days = as.integer(difftime(end_date, start_date, units = "days")),
+              deployment_id = paste0(placename, "_", start_date)
+            ) |>
+            arrange(placename, start_date)
+          
+          dfs[["deployments.csv"]] <- deployments_df
+          
+          rm(camera_checks, stations)
+          gc()
+          
+          incProgress(0.05, detail = "Processing species tags...")
+          
+          tags_processed <- tags |>
+            left_join(
+              species |> select(species_id, order_taxo, family_taxo, genus_taxo, species_taxo, common_names),
+              by = "species_id"
+            )
+          
+          rm(tags, species)
+          gc()
+          
+          incProgress(0.1, detail = paste("Processing", format(nrow(images_raw), big.mark=","), "images..."))
+          
+          chunk_size <- 50000
+          n_rows <- nrow(images_raw)
+          
+          if(n_rows > chunk_size) {
+            images_chunks <- list()
+            n_chunks <- ceiling(n_rows / chunk_size)
+            
+            for(i in seq(1, n_rows, by = chunk_size)) {
+              end_idx <- min(i + chunk_size - 1, n_rows)
+              chunk_num <- ceiling(i / chunk_size)
+              
+              incProgress(0.1 / n_chunks, 
+                          detail = paste("Processing images chunk", chunk_num, "of", n_chunks))
+              
+              chunk <- images_raw[i:end_idx, ] |>
+                left_join(tags_processed, by = c("_id" = "image_id")) |>
+                filter(!is.na(species_id)) |>
+                mutate(
+                  placename = station_id,
+                  timestamp = ymd_hms(exif_timestamp),
+                  sp = gsub("\\s+", "", paste0(genus_taxo, ".", species_taxo)),
+                  number_of_objects = as.integer(coalesce(as.numeric(species_count), 1)),
+                  image_date = as.Date(timestamp),
+                  common_name = common_names,
+                  genus = tolower(genus_taxo),
+                  species = tolower(species_taxo),
+                  order = tolower(order_taxo),
+                  family = tolower(family_taxo)
+                ) |>
+                select(placename, timestamp, image_date, sp, number_of_objects, 
+                       common_name, genus, species, order, family, age_category, sex)
+              
+              images_chunks[[length(images_chunks) + 1]] <- chunk
+              gc()
+            }
+            
+            images_processed <- bind_rows(images_chunks)
+            rm(images_chunks)
+            gc()
+            
+          } else {
+            images_processed <- images_raw |>
+              left_join(tags_processed, by = c("_id" = "image_id")) |>
+              filter(!is.na(species_id)) |>
+              mutate(
+                placename = station_id,
+                timestamp = ymd_hms(exif_timestamp),
+                sp = gsub("\\s+", "", paste0(genus_taxo, ".", species_taxo)),
+                number_of_objects = as.integer(coalesce(as.numeric(species_count), 1)),
+                image_date = as.Date(timestamp),
+                common_name = common_names,
+                genus = tolower(genus_taxo),
+                species = tolower(species_taxo),
+                order = tolower(order_taxo),
+                family = tolower(family_taxo)
+              ) |>
+              select(placename, timestamp, image_date, sp, number_of_objects, 
+                     common_name, genus, species, order, family, age_category, sex)
+          }
+          
+          rm(images_raw, tags_processed)
+          gc()
+          
+          incProgress(0.1, detail = "Linking images to deployments...")
+          
+          require(data.table)
+          
+          images_dt <- as.data.table(images_processed)
+          deployments_dt <- as.data.table(deployments_df)
+          
+          images_dt[, deployment_id := as.character(NA)]
+          
+          unique_stations <- unique(images_dt$placename)
+          n_stations <- length(unique_stations)
+          
+          for(station_idx in seq_along(unique_stations)) {
+            station <- unique_stations[station_idx]
+            
+            if(station_idx %% 10 == 0) {  # Update every 10 stations
+              incProgress(0.1 / n_stations * 10, 
+                          detail = paste("Linking station", station_idx, "of", n_stations))
+            }
+            
+            station_deps <- deployments_dt[placename == station][order(start_date)]
+            
+            if(nrow(station_deps) == 0) next
+            
+            images_dt[placename == station, deployment_id := {
+              dep_ids <- character(.N)
+              
+              for(i in seq_len(.N)) {
+                img_date <- image_date[i]
+                
+                within_idx <- which(img_date >= station_deps$start_date & 
+                                      img_date <= station_deps$end_date)
+                
+                if(length(within_idx) > 0) {
+                  dep_ids[i] <- station_deps$deployment_id[within_idx[1]]
+                } else if(img_date < station_deps$start_date[1]) {
+                  dep_ids[i] <- station_deps$deployment_id[1]
+                } else {
+                  past_idx <- which(station_deps$end_date < img_date)
+                  if(length(past_idx) > 0) {
+                    dep_ids[i] <- station_deps$deployment_id[max(past_idx)]
+                  } else {
+                    dep_ids[i] <- station_deps$deployment_id[1]
+                  }
+                }
+              }
+              dep_ids
+            }]
+          }
+          
+          incProgress(0.05, detail = "Finalizing data structure...")
+          
+          dfs[["images.csv"]] <- images_dt |>
+            as.data.frame() |>
+            mutate(
+              placename = as.character(placename),
+              deployment_id = as.character(deployment_id),
+              sp = as.factor(sp),
+              common_name = as.factor(common_name),
+              genus = as.factor(genus),
+              species = as.factor(species),
+              order = as.factor(order),
+              family = as.factor(family),
+              project_id = as.character(deployments_df$project_id[1]),
+              class = "Mammalia",
+              is_blank = 0L
+            ) |>
+            rename(age = age_category) |>
+            select(project_id, deployment_id, placename, is_blank, class, order, 
+                   family, genus, species, common_name, sp, timestamp, 
+                   number_of_objects, age, sex)
+          
+          rm(images_dt, deployments_dt, images_processed)
+          gc()
+          
+          incProgress(0.05, detail = "Migrations processing complete!")
+          
+          wildco_files <- c("camera_checks.csv", "stations.csv", "tags.csv", 
+                            "species.csv", "images_raw.csv")
+          dfs <- dfs[!names(dfs) %in% wildco_files]
+          
+          gc()
+          
+        }, error = function(e) {
+          message("Migrations processing error: ", e$message)
+          print(e)
+          showNotification(paste("Error processing Migrations data:", e$message), 
+                           type = "error", duration = NULL)
+        })
+      }
+      
+      incProgress(0.05, detail = "Upload complete!")
+      
+      # Store in reactive values
+      isolate({
+        if (length(dfs) > 0) {
+          data_store$dfs <- dfs
+        } else {
+          data_store$dfs <- list()
+        }
       })
-    }
+      
+    })  # Close withProgress
     
-    # Ensure the reactiveValues object updates properly
-    isolate({
-      if (length(dfs) > 0) {
-        data_store$dfs <- dfs
-      } else {
-        data_store$dfs <- list()  # Reset if no valid CSVs found
-      }
-    })
-    
-  })  # <-- This closes observeEvent(input$files, {
-  
+  })  # Close observeEvent
   
   # Clear data button
   observeEvent(input$clear_files, {
@@ -408,89 +465,78 @@ server <- function(input, output, session) {
     deployments <- data_store$dfs[["deployments.csv"]]
     images <- data_store$dfs[["images.csv"]]
     
+    # Ensure character types (not factors)
+    deployments$placename <- as.character(deployments$placename)
+    deployments$deployment_id <- as.character(deployments$deployment_id)
+    images$deployment_id <- as.character(images$deployment_id)
+    
+    # Create unique placenames and order them
+    unique_places <- unique(deployments$placename)
+    place_lookup <- setNames(seq_along(unique_places), unique_places)
+    
     # Call the plot
     p <- plot_ly()
     
-    # We want a separate row for each 'placename' - so lets turn it into a factor
-    deployments$placename <- as.factor(deployments$placename)
-    
     # loop through each place name
-    for(i in seq_along(levels(deployments$placename)))
-    {
-      #Subset the data to just that placename
-      tmp <- deployments[deployments$placename==levels(deployments$placename)[i],]
+    for(i in seq_along(unique_places)) {
+      placename <- unique_places[i]
+      
+      # Subset the data to just that placename
+      tmp <- deployments[deployments$placename == placename, ]
       # Order by date
-      tmp <- tmp[order(tmp$start_date),]
+      tmp <- tmp[order(tmp$start_date), ]
+      
       # Loop through each deployment at that placename
-      for(j in 1:nrow(tmp))
-      {
+      for(j in 1:nrow(tmp)) {
         # Add a box reflecting the first and last image for each deployment
-        tmp_img <- images[images$deployment_id==tmp$deployment_id[j],]
+        tmp_img <- images[images$deployment_id == tmp$deployment_id[j], ]
+        
         # Only run if there are images
-        if(nrow(tmp_img>0))
-        {
+        if(nrow(tmp_img) > 0) {
           # Add an orange colour block to show when images were collected
           p <- add_trace(p,
-                         #Use the start and end date as x coordinates
                          x = c(min(tmp_img$timestamp), max(tmp_img$timestamp)),
-                         #Use the counter for the y coordinates
-                         y = c(i,i),
-                         # State the type of chart
-                         type="scatter",
-                         # make a line that also has points
+                         y = c(i, i),
+                         type = "scatter",
                          mode = "lines",
-                         # Add the deployment ID as hover text
-                         hovertext=paste0(tmp$deployment_id[j]),
-                         #,"<br>",
-                         #,"Start: ",min(tmp_img$timestamp), "<br>",
-                         #,"End: ", max(tmp_img$timestamp)),           # NOT WORKING CURRENTLY
-                         color=I("orange"),
-                         # Color it all black
-                         line=list(
-                           width=8,
-                           opacity=0.5),
-                         # Suppress the legend
+                         hovertext = paste0(tmp$deployment_id[j]),
+                         color = I("orange"),
+                         line = list(width = 8, opacity = 0.5),
                          showlegend = FALSE)
         }
-        # Add a black line to 'p' denotting the start and end periods of each deployment + we add one to the end dat as it plots at mignight and looks like some image data fall outside of the deployment window
+        
+        # Add a black line denoting the start and end periods of each deployment
         p <- add_trace(p, 
-                       #Use the start and end date as x coordinates
-                       #x = c(tmp$start_date[j], tmp$end_date[j]), 
                        x = c(as.POSIXct(paste(tmp$start_date[j], "00:01:00"), format = "%Y-%m-%d %H:%M:%S"),
                              as.POSIXct(paste(tmp$end_date[j], "23:59:00"), format = "%Y-%m-%d %H:%M:%S")),
-                       
-                       #Use the counter for the y coordinates
-                       y = c(i,i), 
-                       # State the type of chart
-                       type="scatter",
-                       # make a line that also has points
+                       y = c(i, i), 
+                       type = "scatter",
                        mode = "lines+markers", 
-                       # Add the deployment ID as hover text
-                       hovertext=tmp$deployment_id[j], 
-                       # Color it all black
-                       color=I("black"),
-                       
+                       hovertext = tmp$deployment_id[j], 
+                       color = I("black"),
                        marker = list(
                          symbol = c("circle", "triangle-left"),
                          size = 7,
-                         color=c("black", "grey")),
-                       
-                       # Suppress the legend
+                         color = c("black", "grey")),
                        showlegend = FALSE)
       }
-      
     }
-    # Add a categorical y axis
-    p <- p %>%   layout(yaxis = list(
-      ticktext = as.list(levels(deployments$placename)), 
-      tickvals = as.list(1:length(levels(deployments$placename))),
-      tickmode = "array"),
-      height=length(levels(deployments$placename))*20) %>%
-      config(displayModeBar = TRUE,
-             modeBarButtonsToRemove = c('lasso2d',  'toggleSpikelines', 'hoverClosestCartesian', 'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
     
+    # Add a categorical y axis
+    p <- p %>% 
+      layout(
+        yaxis = list(
+          ticktext = as.list(unique_places), 
+          tickvals = as.list(1:length(unique_places)),
+          tickmode = "array"),
+        height = max(400, length(unique_places) * 20)
+      ) %>%
+      config(displayModeBar = TRUE,
+             modeBarButtonsToRemove = c('lasso2d', 'toggleSpikelines', 'hoverClosestCartesian', 
+                                        'hoverCompareCartesian', 'zoomIn2d', 'zoomOut2d'))
+    
+    p
   })
-  
   
   # Independent data creation  ---------------------------------------------------
   
@@ -1366,10 +1412,6 @@ server <- function(input, output, session) {
         # Ensure spinner hides even if there's an error
         on.exit(waiter_hide())
         
-        # Load required packages
-        require(officer)
-        require(flextable)
-        
         # Get project name
         project_name <- data_store$dfs[["deployments.csv"]]$project_id[1]
         
@@ -1567,7 +1609,6 @@ server <- function(input, output, session) {
   glossary_data <- reactive({
     
     # Use googlesheets4 to read the sheet
-    require(googlesheets4)
     
     # Make it public access (no authentication needed)
     gs4_deauth()
